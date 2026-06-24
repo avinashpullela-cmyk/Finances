@@ -140,6 +140,8 @@
   <div style="display:flex;gap:8px;align-items:center;">
     <span class="live-badge">● Live</span>
     <span class="badge" id="data-badge">Loading…</span>
+    <button onclick="fetchFresh(false)" style="background:#2d3748;color:#a0aec0;border:1px solid #4a5568;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;" title="Reload from Google Sheets">↻ Refresh</button>
+    <button onclick="localStorage.removeItem('dashUnlocked');localStorage.removeItem('dashData_v3');location.reload();" style="background:none;color:#4a5568;border:none;font-size:11px;cursor:pointer;">Logout</button>
   </div>
 </div>
 
@@ -321,6 +323,8 @@
 const APPS_URL   = 'https://script.google.com/macros/s/AKfycbzzwSwZlNaSYGcqpjB4cMEhkuityjJj2DdjE1VvAATPsOMGqEqr0Rly0XCURjwRuCfV/exec';
 const SECRET_KEY = 'finances2026';
 const DASH_PASS  = 'Canada@2026';
+const CACHE_KEY  = 'dashData_v3';
+const CACHE_TTL  = 6 * 60 * 60 * 1000; // 6 hours
 
 const YEARS       = [2020,2021,2022,2023,2024,2025,2026];
 const MONTHS_LBL  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -363,7 +367,7 @@ function fetchSheetJSON(sheet) {
   return new Promise((resolve, reject) => {
     const cb = '__gas_' + sheet.replace(/\W/g,'') + '_' + Date.now();
     const sc = document.createElement('script');
-    const tm = setTimeout(() => { delete window[cb]; sc.remove(); reject(new Error('Timeout: '+sheet)); }, 25000);
+    const tm = setTimeout(() => { delete window[cb]; sc.remove(); reject(new Error('Timeout: '+sheet)); }, 45000);
     window[cb] = resp => {
       clearTimeout(tm); delete window[cb]; sc.remove();
       resp&&resp.error ? reject(new Error(resp.error)) : resolve((resp&&resp.rows)||[]);
@@ -372,6 +376,34 @@ function fetchSheetJSON(sheet) {
     sc.src = `${APPS_URL}?key=${encodeURIComponent(SECRET_KEY)}&sheet=${encodeURIComponent(sheet)}&callback=${cb}`;
     document.head.appendChild(sc);
   });
+}
+
+// ── Cache helpers ─────────────────────────────────────────────────────────────
+function saveCache(expData, incData) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({expData, incData, ts: Date.now()})); } catch(e) {}
+}
+function loadCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    return d;
+  } catch(e) { return null; }
+}
+function resetState() {
+  expRows=[]; incRows=[]; nannaRows=[];
+  annualExp={}; annualInc={}; catByYear={}; srcByYear={};
+  monthly2026Exp={}; monthly2026Inc={}; monthly2026Cat={};
+}
+function renderAll() {
+  populateBreakdownYears(); populateTrendCats();
+  renderThisMonth(); renderOverview(); renderBreakdown();
+  renderMonthly(); renderIncome(); renderNanna(); renderTrends();
+}
+function showApp(badge) {
+  document.getElementById('data-badge').textContent = badge;
+  document.getElementById('loading-overlay').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
 }
 
 // ── Data processing ───────────────────────────────────────────────────────────
@@ -688,33 +720,66 @@ function showView(name,btn) {
   btn.classList.add('active');
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
-async function init() {
+// ── Fetch fresh data from Apps Script ────────────────────────────────────────
+async function fetchFresh(showLoadingOverlay=false) {
+  if (showLoadingOverlay) {
+    document.getElementById('loading-overlay').style.display='flex';
+    document.getElementById('loading-detail').textContent='Fetching latest data…';
+  } else {
+    document.getElementById('data-badge').textContent='↻ Refreshing…';
+  }
   try {
-    document.getElementById('loading-detail').textContent='Fetching your private sheet data…';
     const [expData,incData]=await Promise.all([fetchSheetJSON('Expenses'),fetchSheetJSON('Income')]);
-    document.getElementById('loading-detail').textContent='Processing data…';
+    saveCache(expData, incData);
+    resetState();
     processExpenses(expData); processIncome(incData);
-    const now=new Date();
-    document.getElementById('data-badge').textContent=`${expRows.length+incRows.length+nannaRows.length} rows · ${now.toLocaleTimeString()}`;
-    populateBreakdownYears(); populateTrendCats();
-    renderThisMonth(); renderOverview(); renderBreakdown(); renderMonthly(); renderIncome(); renderNanna(); renderTrends();
-    document.getElementById('loading-overlay').style.display='none';
-    document.getElementById('app').style.display='block';
+    renderAll();
+    showApp(`${expRows.length+incRows.length+nannaRows.length} rows · ${new Date().toLocaleTimeString()}`);
   } catch(err) {
     console.error(err);
-    document.getElementById('loading-overlay').style.display='none';
-    document.getElementById('error-msg').textContent=err.message||String(err);
-    document.getElementById('error-overlay').style.display='flex';
+    if (document.getElementById('app').style.display==='block') {
+      // Already showing cached data — just update badge
+      document.getElementById('data-badge').textContent='⚠ Refresh failed · showing cached data';
+    } else {
+      document.getElementById('loading-overlay').style.display='none';
+      document.getElementById('error-msg').textContent=err.message||String(err);
+      document.getElementById('error-overlay').style.display='flex';
+    }
+  }
+}
+
+// ── Init with cache ───────────────────────────────────────────────────────────
+async function init() {
+  const cache = loadCache();
+  if (cache && cache.expData && cache.incData) {
+    // Show cached data instantly
+    resetState();
+    processExpenses(cache.expData); processIncome(cache.incData);
+    renderAll();
+    const ageMin = Math.round((Date.now()-cache.ts)/60000);
+    const ageLabel = ageMin < 2 ? 'just now' : ageMin < 60 ? `${ageMin}m ago` : `${Math.round(ageMin/60)}h ago`;
+    showApp(`Cached ${ageLabel}`);
+    // Refresh in background if older than TTL
+    if (Date.now()-cache.ts > CACHE_TTL) {
+      fetchFresh(false);
+    } else {
+      setTimeout(()=>fetchFresh(false), 2000); // still refresh quietly after 2s
+    }
+  } else {
+    // No cache — must load from network
+    await fetchFresh(true);
   }
 }
 
 // ── Password gate ─────────────────────────────────────────────────────────────
+function unlock() {
+  document.getElementById('pw-gate').style.display='none';
+  init();
+}
 function checkPw() {
   if (document.getElementById('pw-input').value===DASH_PASS) {
-    document.getElementById('pw-gate').style.display='none';
-    document.getElementById('loading-overlay').style.display='flex';
-    init();
+    localStorage.setItem('dashUnlocked','1');
+    unlock();
   } else {
     document.getElementById('pw-err').style.display='block';
     document.getElementById('pw-input').value='';
@@ -722,6 +787,11 @@ function checkPw() {
   }
 }
 document.getElementById('pw-input').addEventListener('keydown',e=>{if(e.key==='Enter')checkPw();});
+// Auto-unlock if previously authenticated
+window.addEventListener('load', ()=>{
+  if (localStorage.getItem('dashUnlocked')==='1') { unlock(); }
+  else { document.getElementById('pw-input').focus(); }
+});
 </script>
 </body>
 </html>
