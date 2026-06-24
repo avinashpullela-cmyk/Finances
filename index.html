@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expense Monitor Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+
+  .header { background: #1a1d2e; border-bottom: 1px solid #2d3748; padding: 20px 32px; display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-size: 20px; font-weight: 600; color: #fff; }
+  .header .subtitle { font-size: 13px; color: #718096; margin-top: 2px; }
+  .badge { background: #2d3748; color: #a0aec0; font-size: 11px; padding: 3px 10px; border-radius: 12px; }
+  .live-badge { background: #1a3a2a; color: #68d391; font-size: 11px; padding: 3px 10px; border-radius: 12px; border: 1px solid #2d6a4a; }
+
+  .tabs { display: flex; gap: 4px; padding: 16px 32px 0; background: #1a1d2e; border-bottom: 1px solid #2d3748; flex-wrap: wrap; }
+  .tab { padding: 10px 18px; font-size: 13px; font-weight: 500; cursor: pointer; border-radius: 6px 6px 0 0; color: #718096; border: none; background: none; transition: all 0.15s; }
+  .tab:hover { color: #a0aec0; background: #2d3748; }
+  .tab.active { color: #63b3ed; background: #0f1117; border: 1px solid #2d3748; border-bottom: 1px solid #0f1117; }
+  .tab.nanna { color: #b794f4; }
+  .tab.nanna.active { color: #b794f4; }
+
+  .view { display: none; padding: 28px 32px; }
+  .view.active { display: block; }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .kpi-row-3 { grid-template-columns: repeat(3, 1fr); }
+  .kpi { background: #1a1d2e; border: 1px solid #2d3748; border-radius: 10px; padding: 20px; }
+  .kpi .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #718096; margin-bottom: 8px; }
+  .kpi .value { font-size: 26px; font-weight: 700; line-height: 1; }
+  .kpi .sub { font-size: 12px; color: #718096; margin-top: 6px; }
+  .kpi.green .value { color: #68d391; }
+  .kpi.blue .value { color: #63b3ed; }
+  .kpi.red .value { color: #fc8181; }
+  .kpi.yellow .value { color: #f6e05e; }
+  .kpi.purple .value { color: #b794f4; }
+  .kpi.orange .value { color: #f6ad55; }
+
+  .chart-grid { display: grid; gap: 20px; }
+  .chart-box { background: #1a1d2e; border: 1px solid #2d3748; border-radius: 10px; padding: 20px; }
+  .chart-box h3 { font-size: 12px; font-weight: 600; color: #a0aec0; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .chart-box canvas { max-height: 280px; }
+
+  .section-divider { border: none; border-top: 1px solid #2d3748; margin: 28px 0; }
+
+  .controls { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; padding: 16px; background: #1a1d2e; border: 1px solid #2d3748; border-radius: 10px; }
+  .controls label { font-size: 12px; color: #718096; white-space: nowrap; }
+  .preset-btn { background: #2d3748; color: #a0aec0; border: 1px solid #4a5568; border-radius: 6px; padding: 5px 11px; font-size: 12px; cursor: pointer; transition: all .15s; white-space: nowrap; }
+  .preset-btn:hover { background: #3182ce; color: #fff; border-color: #3182ce; }
+  .preset-btn.active { background: #3182ce; color: #fff; border-color: #3182ce; }
+  .preset-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .preset-label { font-size: 11px; color: #718096; margin-right: 4px; }
+  select { background: #2d3748; color: #e2e8f0; border: 1px solid #4a5568; border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; outline: none; }
+  select:focus { border-color: #63b3ed; }
+  .ctrl-group { display: flex; align-items: center; gap: 8px; }
+
+  .table-box { background: #1a1d2e; border: 1px solid #2d3748; border-radius: 10px; overflow: hidden; margin-bottom: 20px; }
+  .table-box h3 { font-size: 12px; font-weight: 600; color: #a0aec0; padding: 14px 20px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #2d3748; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #2d3748; color: #a0aec0; padding: 9px 14px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  th.num { text-align: right; }
+  td { padding: 9px 14px; border-bottom: 1px solid #1e2433; color: #e2e8f0; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:hover td { background: #1e2433; }
+  tr:last-child td { border-bottom: none; }
+  .bar-inline { display: flex; align-items: center; gap: 8px; }
+  .mini-bar { height: 6px; border-radius: 3px; flex-shrink: 0; }
+  .positive { color: #68d391; }
+  .negative { color: #fc8181; }
+  .neutral { color: #a0aec0; }
+  .purple-text { color: #b794f4; }
+
+  .note { font-size: 11px; color: #718096; margin-top: 12px; padding: 10px 14px; background: #1a1d2e; border: 1px solid #2d3748; border-radius: 6px; border-left: 3px solid #4a5568; }
+  .alert-box { background: #1a2238; border: 1px solid #3b4a6b; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 13px; color: #93c5fd; border-left: 3px solid #3b82f6; }
+  .warn-box { background: #1f1a0f; border: 1px solid #6b4c1a; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 13px; color: #f6ad55; border-left: 3px solid #ed8936; }
+  .nanna-box { background: #170f2a; border: 1px solid #553c9a; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 13px; color: #d6bcfa; border-left: 3px solid #805ad5; }
+
+  .savings-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+  .savings-badge.good { background: #1a3a2a; color: #68d391; }
+  .savings-badge.warn { background: #3a2a1a; color: #f6ad55; }
+  .savings-badge.bad { background: #3a1a1a; color: #fc8181; }
+
+  .trend-stat-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-top: 16px; }
+  .trend-stat { background: #0f1117; border: 1px solid #2d3748; border-radius: 8px; padding: 12px 16px; }
+  .trend-stat .ts-label { font-size: 11px; color: #718096; margin-bottom: 4px; }
+  .trend-stat .ts-val { font-size: 18px; font-weight: 700; color: #e2e8f0; }
+
+  /* Loading overlay */
+  #loading-overlay {
+    position: fixed; inset: 0; background: #0f1117; z-index: 9999;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+  }
+  .spinner {
+    width: 48px; height: 48px; border: 4px solid #2d3748; border-top-color: #63b3ed;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { color: #718096; font-size: 14px; }
+  .loading-sub { color: #4a5568; font-size: 12px; }
+
+  #error-overlay {
+    position: fixed; inset: 0; background: #0f1117; z-index: 9999;
+    display: none; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 40px;
+  }
+  .error-box { background: #2d1414; border: 1px solid #6b2b2b; border-radius: 12px; padding: 28px 32px; max-width: 560px; text-align: center; }
+  .error-box h2 { color: #fc8181; margin-bottom: 12px; }
+  .error-box p { color: #a0aec0; font-size: 13px; line-height: 1.6; margin-bottom: 8px; }
+  .error-box code { background: #1a1d2e; color: #68d391; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-text">Loading live data from Google Sheets…</div>
+  <div class="loading-sub" id="loading-detail">Fetching Income & Expenses sheets</div>
+</div>
+
+<!-- Error overlay -->
+<div id="error-overlay">
+  <div class="error-box">
+    <h2>⚠️ Could not load data</h2>
+    <p id="error-msg">Unable to fetch data from Google Sheets.</p>
+    <p>Make sure the spreadsheet is set to <strong>"Anyone with the link can view"</strong> and try opening this file from a browser (not Safari's file:// reader if CORS blocks it).</p>
+    <p style="margin-top:12px;"><button onclick="location.reload()" style="background:#3182ce;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;">Retry</button></p>
+  </div>
+</div>
+
+<div id="app" style="display:none;">
+
+<div class="header">
+  <div>
+    <h1>Canada Expense Monitor</h1>
+    <div class="subtitle">Avinash &amp; Priya · Ajax, Ontario · 2020–2026</div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <span class="live-badge">● Live</span>
+    <span class="badge" id="data-badge">Loading…</span>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showView('thismonth',this)">📅 This Month</button>
+  <button class="tab" onclick="showView('overview',this)">Annual Overview</button>
+  <button class="tab" onclick="showView('breakdown',this)">Expense Breakdown</button>
+  <button class="tab" onclick="showView('monthly',this)">2026 Monthly</button>
+  <button class="tab" onclick="showView('income',this)">Income Sources</button>
+  <button class="tab nanna" onclick="showView('nanna',this)">👴 Nanna Account</button>
+  <button class="tab" onclick="showView('trends',this)">Category Trends</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     VIEW 0: THIS MONTH
+═══════════════════════════════════════════════════════ -->
+<div id="view-thismonth" class="view active">
+  <div class="kpi-row" id="kpi-thismonth"></div>
+
+  <!-- One-time / non-recurring flags -->
+  <div class="table-box" style="margin-bottom:20px;" id="onetime-box">
+    <h3 id="onetime-title">🔔 One-Time &amp; Non-Recurring Expenses</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Vendor / Description</th>
+          <th class="num">Amount</th>
+          <th>Why Flagged</th>
+          <th class="num">vs Baseline</th>
+        </tr>
+      </thead>
+      <tbody id="thismonth-onetime-body"></tbody>
+    </table>
+    <div class="note" id="onetime-note" style="display:none;"></div>
+  </div>
+
+  <div class="chart-grid" style="grid-template-columns:3fr 2fr; margin-bottom:20px;">
+    <div class="chart-box">
+      <h3 id="thismonth-cat-title">Category Spend — This Month vs 3-Month Average</h3>
+      <canvas id="thisMonthCatBar" style="max-height:320px;"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>Monthly Spend Pace (Last 4 Months)</h3>
+      <canvas id="thisMonthPace" style="max-height:320px;"></canvas>
+    </div>
+  </div>
+  <div class="chart-grid" style="grid-template-columns:1fr 1fr; margin-bottom:20px;">
+    <div class="table-box" style="margin-bottom:0;">
+      <h3>⚡ Outlier Categories — Above 3-Month Avg</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th class="num">This Month</th>
+            <th class="num">3-Mo Avg</th>
+            <th class="num">Δ vs Avg</th>
+          </tr>
+        </thead>
+        <tbody id="thismonth-outliers-body"></tbody>
+      </table>
+    </div>
+    <div class="table-box" style="margin-bottom:0;">
+      <h3 id="thismonth-cattable-title">All Categories This Month</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th class="num">Spent</th>
+            <th class="num">% of MTD Total</th>
+          </tr>
+        </thead>
+        <tbody id="thismonth-allcats-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     VIEW 1: ANNUAL OVERVIEW
+═══════════════════════════════════════════════════════ -->
+<div id="view-overview" class="view">
+  <div class="kpi-row" id="kpi-overview"></div>
+
+  <div class="chart-grid" style="grid-template-columns:2fr 1fr; margin-bottom:20px;">
+    <div class="chart-box">
+      <h3>Household Income vs Expenses vs Savings (2020–2026)</h3>
+      <canvas id="overviewBar"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>Savings Rate by Year</h3>
+      <canvas id="savingsRate"></canvas>
+    </div>
+  </div>
+
+  <div class="table-box">
+    <h3>Annual Summary — Household (excl. Indian Income transfers)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Year</th>
+          <th class="num">Income</th>
+          <th class="num">Expenses</th>
+          <th class="num">Saved</th>
+          <th class="num">Rate</th>
+          <th>Notable</th>
+        </tr>
+      </thead>
+      <tbody id="annual-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     VIEW 2: EXPENSE BREAKDOWN
+═══════════════════════════════════════════════════════ -->
+<div id="view-breakdown" class="view">
+  <div class="controls">
+    <div class="ctrl-group">
+      <label>Year:</label>
+      <select id="breakdown-year" onchange="renderBreakdown()"></select>
+    </div>
+    <div class="ctrl-group">
+      <label>Sort by:</label>
+      <select id="breakdown-sort" onchange="renderBreakdown()">
+        <option value="amount">Amount (high→low)</option>
+        <option value="name">Category name</option>
+      </select>
+    </div>
+  </div>
+  <div class="chart-grid" style="grid-template-columns:1fr 1fr; margin-bottom:20px;">
+    <div class="chart-box" style="max-height:420px;overflow:hidden;">
+      <h3 id="breakdown-bar-title">Expense Categories</h3>
+      <canvas id="breakdownBar" style="max-height:360px;"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3 id="breakdown-pie-title">Category Share</h3>
+      <canvas id="breakdownPie" style="max-height:360px;"></canvas>
+    </div>
+  </div>
+  <div class="table-box">
+    <h3 id="breakdown-table-title">Category Detail</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th class="num">Amount</th>
+          <th class="num">% of Total</th>
+          <th>Share</th>
+        </tr>
+      </thead>
+      <tbody id="breakdown-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     VIEW 3: 2026 MONTHLY
+═══════════════════════════════════════════════════════ -->
+<div id="view-monthly" class="view">
+  <div class="kpi-row" id="kpi-monthly"></div>
+  <div class="chart-grid" style="grid-template-columns:2fr 1fr; margin-bottom:20px;">
+    <div class="chart-box">
+      <h3>2026 Monthly Income vs Expenses</h3>
+      <canvas id="monthlyBar"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>2026 Monthly Savings Rate</h3>
+      <canvas id="monthlySavings"></canvas>
+    </div>
+  </div>
+  <div class="table-box">
+    <h3>2026 Month-by-Month Detail</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Month</th>
+          <th class="num">Income</th>
+          <th class="num">Expenses</th>
+          <th class="num">Saved</th>
+          <th class="num">Rate</th>
+          <th>Top Category</th>
+        </tr>
+      </thead>
+      <tbody id="monthly-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     VIEW 4: INCOME SOURCES
+═══════════════════════════════════════════════════════ -->
+<div id="view-income" class="view">
+  <div class="kpi-row kpi-row-3" id="kpi-income"></div>
+  <div class="chart-grid" style="grid-template-columns:2fr 1fr; margin-bottom:20px;">
+    <div class="chart-box">
+      <h3>Income by Source — Annual (excl. Indian Income)</h3>
+      <canvas id="incomeBar"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>2026 YTD Income Mix</h3>
+      <canvas id="incomePie"></canvas>
+    </div>
+  </div>
+  <div class="table-box">
+    <h3>Income Source Breakdown by Year</h3>
+    <table>
+      <thead id="income-table-head"></thead>
+      <tbody id="income-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     VIEW 5: NANNA ACCOUNT
+═══════════════════════════════════════════════════════ -->
+<div id="view-nanna" class="view">
+  <div class="nanna-box">
+    👴 Tracks all <strong>Indian Income</strong> entries — funds received from or earmarked for Nanna / India. This is a separate financial channel, not included in household income or savings calculations.
+  </div>
+  <div class="kpi-row kpi-row-3" id="kpi-nanna"></div>
+  <div class="chart-grid" style="grid-template-columns:2fr 1fr; margin-bottom:20px;">
+    <div class="chart-box">
+      <h3>Nanna / India Income by Year</h3>
+      <canvas id="nannaBar"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>Nanna / India Income by Source</h3>
+      <canvas id="nannaPie"></canvas>
+    </div>
+  </div>
+  <div class="table-box">
+    <h3>Nanna Account — All Entries</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Year</th>
+          <th>Source</th>
+          <th class="num">Amount</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody id="nanna-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     VIEW 6: CATEGORY TRENDS
+═══════════════════════════════════════════════════════ -->
+<div id="view-trends" class="view">
+  <div class="controls">
+    <div class="ctrl-group">
+      <label>Category:</label>
+      <select id="trend-category" onchange="renderTrends()"></select>
+    </div>
+  </div>
+  <div class="chart-box" style="margin-bottom:20px;">
+    <h3 id="trend-title">Category Trend (Annual)</h3>
+    <canvas id="trendLine" style="max-height:260px;"></canvas>
+  </div>
+  <div class="table-box">
+    <h3>All Categories — Annual Spend</h3>
+    <table>
+      <thead id="trends-table-head"></thead>
+      <tbody id="trends-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+// ─── CONFIG ─────────────────────────────────────────────────────────────────
+const SHEET_ID = '1oHBmumj9bjnIsYhuU_A_U8wK_1VBv5VsPmIdc8k2Rdg';
+const GVIZ_BASE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tq=select%20*`;
+
+const YEARS = [2020,2021,2022,2023,2024,2025,2026];
+const MONTHS_LABEL = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+const EXPENSE_EXCLUDE_CATS = ['Buying Windle','Cashback/Bonuses','Advance Payments'];
+const INCOME_EXCLUDE_CAT   = 'Indian Income';  // excluded from household, tracked separately in Nanna tab
+
+// Category name normalisation
+const CAT_ALIAS = {
+  'Trnasportation': 'Transportation',
+  'transportation': 'Transportation',
+};
+const SRC_ALIAS = {
+  'Citi Me': 'CITI Me',
+  'citi me': 'CITI Me',
+  'Citac me': 'Citac Me',
+};
+
+const NOTABLE = {
+  2020: 'Arrival year; CERB + COVID support; first year in Canada',
+  2021: 'First full year; bought Windle home mid-year; strong savings rate',
+  2022: 'Both working full-time; first full mortgage year; furniture & move costs',
+  2023: 'Peak income year; home improvements; parents visit',
+  2024: 'Major reno ($22K); Priya on maternity leave; Nanna joins household',
+  2025: "Priya on EI most of year; baby costs rise; Nanna's first full year",
+  2026: 'Nanna care costs surge; Priya returns to work Q1 (YTD)',
+};
+
+// Chart colour palette
+const PALETTE = [
+  '#63b3ed','#68d391','#f6ad55','#fc8181','#b794f4','#76e4f7',
+  '#f6e05e','#e2e8f0','#ed8936','#4fd1c5','#9f7aea','#f687b3',
+  '#a0aec0','#48bb78','#ed64a6','#667eea','#f6ad55','#fc8181',
+  '#b2f5ea','#fefcbf','#fed7d7','#e9d8fd','#c6f6d5','#bee3f8',
+];
+
+// ─── JSONP FETCHER (works from file://, bypasses CORS) ───────────────────────
+function fetchGvizJSON(sheet) {
+  return new Promise((resolve, reject) => {
+    const cbName = '__gviz_' + sheet.replace(/\W/g,'') + '_' + Date.now();
+    const script = document.createElement('script');
+    const timer = setTimeout(() => {
+      delete window[cbName];
+      script.remove();
+      reject(new Error(`Timeout loading "${sheet}" sheet after 15s`));
+    }, 15000);
+
+    window[cbName] = function(resp) {
+      clearTimeout(timer);
+      delete window[cbName];
+      script.remove();
+      if (resp && resp.status === 'error') {
+        reject(new Error('gviz error: ' + (resp.errors?.[0]?.detailed_message || JSON.stringify(resp.errors))));
+      } else if (resp && resp.table) {
+        resolve(resp.table);
+      } else {
+        reject(new Error('Unexpected gviz response for sheet "' + sheet + '"'));
+      }
+    };
+
+    script.onerror = () => {
+      clearTimeout(timer);
+      delete window[cbName];
+      reject(new Error(`Script load failed for sheet "${sheet}". Is the spreadsheet public?`));
+    };
+
+    script.src = `${GVIZ_BASE}&sheet=${encodeURIComponent(sheet)}&tqx=out:json;responseHandler:${cbName}`;
+    document.head.appendChild(script);
+  });
+}
+
+// helper: safely get cell value
+const cv = (row, i) => (row.c && row.c[i] && row.c[i].v != null) ? row.c[i].v : '';
+
+// ─── HELPERS ────────────────────────────────────────────────────────────────
+const fmt = (n, decimals=0) => '$' + Math.round(n).toLocaleString('en-CA');
+const fmtK = n => { const v = Math.abs(n); return (v >= 1000 ? '$' + (v/1000).toFixed(1) + 'K' : '$' + Math.round(v)); };
+const pct = n => n.toFixed(1) + '%';
+const norm = s => CAT_ALIAS[s] || s;
+const normSrc = s => SRC_ALIAS[s] || s;
+
+function savingsClass(r) {
+  if (r >= 25) return 'good';
+  if (r >= 10) return 'warn';
+  return 'bad';
+}
+
+// ─── GLOBAL STATE ───────────────────────────────────────────────────────────
+let expRows = [];   // {year, month, cat, amount}
+let incRows = [];   // {year, month, source, cat, amount, notes}
+let nannaRows = []; // {year, month, source, amount, notes}
+
+// Aggregated
+let annualExp = {};   // year -> total
+let annualInc = {};   // year -> total (excl Indian Income)
+let catByYear = {};   // cat -> year -> total
+let srcByYear = {};   // source -> year -> total
+let monthly2026Exp = {}; // month -> total
+let monthly2026Inc = {}; // month -> total
+let monthly2026Cat = {}; // month -> cat -> total
+
+// ─── DATA PROCESSING ────────────────────────────────────────────────────────
+function processExpenses(table) {
+  // columns: Date(0), Store/Vendor(1), Amount(2), Expense Category(3), Year(4), Month(5)
+  for (const row of (table.rows || [])) {
+    if (!row || !row.c) continue;
+    const cat    = norm(String(cv(row,3)||''));
+    const amt    = Number(cv(row,2)) || 0;
+    const yr     = Number(cv(row,4)) || 0;
+    const mo     = Number(cv(row,5)) || 0;
+    const vendor = String(cv(row,1)||'');
+    if (!cat || !yr || EXPENSE_EXCLUDE_CATS.includes(cat)) continue;
+    expRows.push({year:yr, month:mo, cat, amount:amt, vendor});
+
+    annualExp[yr] = (annualExp[yr]||0) + amt;
+    if (!catByYear[cat]) catByYear[cat] = {};
+    catByYear[cat][yr] = (catByYear[cat][yr]||0) + amt;
+
+    if (yr === 2026) {
+      monthly2026Exp[mo] = (monthly2026Exp[mo]||0) + amt;
+      if (!monthly2026Cat[mo]) monthly2026Cat[mo] = {};
+      monthly2026Cat[mo][cat] = (monthly2026Cat[mo][cat]||0) + amt;
+    }
+  }
+}
+
+function processIncome(table) {
+  // columns: Date(0), Source(1), Amount(2), Income Category(3), Notes(4), Year(5), Month(6)
+  for (const row of (table.rows || [])) {
+    if (!row || !row.c) continue;
+    const src   = normSrc(String(cv(row,1)||''));
+    const amt   = Number(cv(row,2)) || 0;
+    const cat   = String(cv(row,3)||'');
+    const notes = String(cv(row,4)||'');
+    const yr    = Number(cv(row,5)) || 0;
+    const mo    = Number(cv(row,6)) || 0;
+    if (!yr || !src) continue;
+
+    if (cat === INCOME_EXCLUDE_CAT) {
+      nannaRows.push({year:yr, month:mo, source:src, amount:amt, notes});
+      continue; // tracked separately in Nanna tab
+    }
+
+    incRows.push({year:yr, month:mo, source:src, cat, amount:amt, notes});
+    annualInc[yr] = (annualInc[yr]||0) + amt;
+
+    if (!srcByYear[src]) srcByYear[src] = {};
+    srcByYear[src][yr] = (srcByYear[src][yr]||0) + amt;
+
+    if (yr === 2026) {
+      monthly2026Inc[mo] = (monthly2026Inc[mo]||0) + amt;
+    }
+  }
+}
+
+// ─── CHART HELPERS ──────────────────────────────────────────────────────────
+let chartInstances = {};
+function mkChart(id, cfg) {
+  if (chartInstances[id]) chartInstances[id].destroy();
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  chartInstances[id] = new Chart(ctx, cfg);
+  return chartInstances[id];
+}
+
+const darkDefaults = {
+  color: '#a0aec0',
+  plugins: {
+    legend: { labels: { color: '#a0aec0', boxWidth: 12, font: { size: 11 } } },
+    tooltip: {
+      backgroundColor: '#1a1d2e', borderColor: '#2d3748', borderWidth: 1,
+      titleColor: '#e2e8f0', bodyColor: '#a0aec0',
+      callbacks: { label: ctx => ' ' + fmt(ctx.parsed.y ?? ctx.parsed) }
+    }
+  },
+  scales: {
+    x: { ticks: { color: '#718096' }, grid: { color: '#1e2433' } },
+    y: { ticks: { color: '#718096', callback: v => fmtK(v) }, grid: { color: '#1e2433' } }
+  }
+};
+
+// ─── VIEW: ANNUAL OVERVIEW ───────────────────────────────────────────────────
+function renderOverview() {
+  const years = YEARS;
+  const inc  = years.map(y => annualInc[y]||0);
+  const exp  = years.map(y => annualExp[y]||0);
+  const sav  = years.map((y,i) => inc[i] - exp[i]);
+  const rate = years.map((y,i) => inc[i] > 0 ? (sav[i]/inc[i])*100 : 0);
+
+  // KPI cards — last full year (2025) + 2026 YTD
+  const ly = 2025, ytdY = 2026;
+  const lyInc = annualInc[ly]||0, lyExp = annualExp[ly]||0, lySav = lyInc - lyExp, lyRate = lyInc>0?(lySav/lyInc)*100:0;
+  const ytdInc = annualInc[ytdY]||0, ytdExp = annualExp[ytdY]||0, ytdSav = ytdInc - ytdExp, ytdRate = ytdInc>0?(ytdSav/ytdInc)*100:0;
+
+  document.getElementById('kpi-overview').innerHTML = `
+    <div class="kpi blue"><div class="label">2025 Household Income</div><div class="value">${fmtK(lyInc)}</div><div class="sub">excl. Indian Income / transfers</div></div>
+    <div class="kpi red"><div class="label">2025 Expenses</div><div class="value">${fmtK(lyExp)}</div><div class="sub">${fmtK(lyExp/12)} avg/month</div></div>
+    <div class="kpi green"><div class="label">2025 Household Savings</div><div class="value">${fmtK(lySav)}</div><div class="sub">${pct(lyRate)} savings rate</div></div>
+    <div class="kpi yellow"><div class="label">2026 YTD</div><div class="value">${fmtK(ytdSav)} saved</div><div class="sub">Income ${fmtK(ytdInc)} · Expenses ${fmtK(ytdExp)} · ${pct(ytdRate)} rate</div></div>
+  `;
+
+  const labels = years.map(y => y===2026?'2026 YTD':String(y));
+  mkChart('overviewBar', {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Income',   data: inc, backgroundColor: '#63b3ed88', borderColor: '#63b3ed', borderWidth: 1 },
+        { label: 'Expenses', data: exp, backgroundColor: '#fc818188', borderColor: '#fc8181', borderWidth: 1 },
+        { label: 'Savings',  data: sav, backgroundColor: '#68d39188', borderColor: '#68d391', borderWidth: 1 },
+      ]
+    },
+    options: { ...darkDefaults, responsive: true, interaction: { mode:'index' },
+      plugins: { ...darkDefaults.plugins,
+        tooltip: { ...darkDefaults.plugins.tooltip,
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` }
+        }
+      }
+    }
+  });
+
+  mkChart('savingsRate', {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ label: 'Savings Rate', data: rate, backgroundColor: rate.map(r => r>=25?'#68d391aa':r>=10?'#f6ad55aa':'#fc8181aa'), borderRadius: 4 }]
+    },
+    options: { ...darkDefaults, responsive: true,
+      plugins: { ...darkDefaults.plugins,
+        tooltip: { ...darkDefaults.plugins.tooltip, callbacks: { label: ctx => ` ${ctx.parsed.y.toFixed(1)}%` } }
+      },
+      scales: { ...darkDefaults.scales, y: { ...darkDefaults.scales.y, ticks: { color:'#718096', callback: v=>v+'%' } } }
+    }
+  });
+
+  // Annual summary table
+  let rows = '';
+  for (const y of years) {
+    const yInc = annualInc[y]||0, yExp = annualExp[y]||0;
+    const ySav = yInc - yExp, yRate = yInc>0?(ySav/yInc)*100:0;
+    const cls = savingsClass(yRate);
+    const savSign = ySav>=0 ? `<span class="positive">+${fmt(ySav)}</span>` : `<span class="negative">${fmt(ySav)}</span>`;
+    const label = y===2026 ? '2026 YTD' : y;
+    rows += `<tr>
+      <td><strong>${label}</strong></td>
+      <td class="num">${fmt(yInc)}</td>
+      <td class="num">${fmt(yExp)}</td>
+      <td class="num">${savSign}</td>
+      <td class="num"><span class="savings-badge ${cls}">${pct(yRate)}</span></td>
+      <td class="neutral" style="font-size:12px;">${NOTABLE[y]||''}</td>
+    </tr>`;
+  }
+  document.getElementById('annual-table-body').innerHTML = rows;
+}
+
+// ─── VIEW: EXPENSE BREAKDOWN ─────────────────────────────────────────────────
+function populateBreakdownYears() {
+  const sel = document.getElementById('breakdown-year');
+  sel.innerHTML = YEARS.slice().reverse().map(y => `<option value="${y}">${y===2026?'2026 YTD':y}</option>`).join('');
+}
+
+function renderBreakdown() {
+  const yr   = parseInt(document.getElementById('breakdown-year').value);
+  const sort = document.getElementById('breakdown-sort').value;
+
+  let cats = Object.entries(catByYear)
+    .map(([cat,data]) => ({ cat, amount: data[yr]||0 }))
+    .filter(d => d.amount > 0);
+
+  cats.sort((a,b) => sort==='amount' ? b.amount-a.amount : a.cat.localeCompare(b.cat));
+
+  const total = cats.reduce((s,c)=>s+c.amount,0);
+  const label = yr===2026?'2026 YTD':yr;
+
+  document.getElementById('breakdown-bar-title').textContent = `Expense Categories — ${label}`;
+  document.getElementById('breakdown-pie-title').textContent = `Category Share — ${label}`;
+  document.getElementById('breakdown-table-title').textContent = `Category Detail — ${label}`;
+
+  const labels = cats.map(c=>c.cat);
+  const data   = cats.map(c=>c.amount);
+  const colors = cats.map((_,i)=>PALETTE[i%PALETTE.length]);
+
+  mkChart('breakdownBar', {
+    type: 'bar',
+    data: { labels, datasets: [{ label:'Expenses', data, backgroundColor: colors.map(c=>c+'99'), borderColor:colors, borderWidth:1 }] },
+    options: { ...darkDefaults, indexAxis:'y', responsive:true, plugins: { ...darkDefaults.plugins, legend:{display:false} },
+      scales: { x:{ticks:{color:'#718096',callback:v=>fmtK(v)},grid:{color:'#1e2433'}}, y:{ticks:{color:'#718096',font:{size:11}},grid:{color:'#1e2433'}} }
+    }
+  });
+
+  mkChart('breakdownPie', {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors.map(c=>c+'cc'), borderColor:'#0f1117', borderWidth:2 }] },
+    options: { responsive:true, plugins: { legend:{labels:{color:'#a0aec0',boxWidth:10,font:{size:10}}},
+      tooltip:{backgroundColor:'#1a1d2e',borderColor:'#2d3748',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#a0aec0',
+        callbacks:{ label: ctx=>`  ${ctx.label}: ${fmt(ctx.parsed)} (${pct(ctx.parsed/total*100)})` } }
+    } }
+  });
+
+  let rows = '';
+  for (const c of cats) {
+    const sharePct = total>0?c.amount/total*100:0;
+    const barW = Math.round(sharePct*1.5);
+    rows += `<tr>
+      <td>${c.cat}</td>
+      <td class="num">${fmt(c.amount)}</td>
+      <td class="num">${pct(sharePct)}</td>
+      <td><div class="bar-inline"><div class="mini-bar" style="width:${barW}px;background:#63b3ed66;"></div></div></td>
+    </tr>`;
+  }
+  document.getElementById('breakdown-table-body').innerHTML = rows || '<tr><td colspan="4" class="neutral">No data</td></tr>';
+}
+
+// ─── VIEW: 2026 MONTHLY ──────────────────────────────────────────────────────
+function renderMonthly() {
+  const months = [1,2,3,4,5,6,7,8,9,10,11,12];
+  const incM = months.map(m => monthly2026Inc[m]||0);
+  const expM = months.map(m => monthly2026Exp[m]||0);
+  const savM = months.map((m,i) => incM[i] - expM[i]);
+  const rateM = months.map((m,i) => incM[i]>0?(savM[i]/incM[i])*100:0);
+
+  // Only show months with data
+  const lastMonth = months.filter(m=>(monthly2026Inc[m]||0)+(monthly2026Exp[m]||0)>0).slice(-1)[0]||6;
+  const activeM = months.filter(m=>m<=lastMonth);
+
+  const totalYTDInc = activeM.reduce((s,m)=>s+(monthly2026Inc[m]||0),0);
+  const totalYTDExp = activeM.reduce((s,m)=>s+(monthly2026Exp[m]||0),0);
+  const totalYTDSav = totalYTDInc - totalYTDExp;
+  const ytdRate = totalYTDInc>0?(totalYTDSav/totalYTDInc)*100:0;
+  const avgMonthlyExp = totalYTDExp / activeM.length;
+
+  const bestSavAmt = Math.max(...activeM.map(m=>savM[m-1]));
+  const bestSavIdx = savM.findIndex(v=>v===bestSavAmt);
+  const bestSavMonth = MONTHS_LABEL[bestSavIdx] || '—';
+
+  document.getElementById('kpi-monthly').innerHTML = `
+    <div class="kpi blue"><div class="label">2026 YTD Income</div><div class="value">${fmtK(totalYTDInc)}</div><div class="sub">Jan–${MONTHS_LABEL[lastMonth-1]} ${activeM.length} months</div></div>
+    <div class="kpi red"><div class="label">2026 YTD Expenses</div><div class="value">${fmtK(totalYTDExp)}</div><div class="sub">${fmtK(avgMonthlyExp)} avg/month</div></div>
+    <div class="kpi green"><div class="label">2026 YTD Savings</div><div class="value">${fmtK(totalYTDSav)}</div><div class="sub">${pct(ytdRate)} savings rate</div></div>
+    <div class="kpi yellow"><div class="label">Best Savings Month</div><div class="value">${bestSavMonth}</div><div class="sub">${fmtK(bestSavAmt)} saved</div></div>
+  `;
+
+  const labels = activeM.map(m=>MONTHS_LABEL[m-1]);
+  const incD   = activeM.map(m=>monthly2026Inc[m]||0);
+  const expD   = activeM.map(m=>monthly2026Exp[m]||0);
+  const savD   = activeM.map(m=>savM[m-1]);
+
+  mkChart('monthlyBar', {
+    type:'bar',
+    data:{ labels, datasets:[
+      {label:'Income',  data:incD, backgroundColor:'#63b3ed88', borderColor:'#63b3ed', borderWidth:1},
+      {label:'Expenses',data:expD, backgroundColor:'#fc818188', borderColor:'#fc8181', borderWidth:1},
+      {label:'Savings', data:savD, backgroundColor:savD.map(v=>v>=0?'#68d39188':'#fc818188'), borderColor:savD.map(v=>v>=0?'#68d391':'#fc8181'), borderWidth:1},
+    ]},
+    options:{...darkDefaults,responsive:true,interaction:{mode:'index'},
+      plugins:{...darkDefaults.plugins,tooltip:{...darkDefaults.plugins.tooltip,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`}}}
+    }
+  });
+
+  mkChart('monthlySavings',{
+    type:'bar',
+    data:{labels,datasets:[{label:'Savings Rate',data:activeM.map(m=>rateM[m-1]),
+      backgroundColor:activeM.map(m=>rateM[m-1]>=25?'#68d391aa':rateM[m-1]>=0?'#f6ad55aa':'#fc8181aa'),borderRadius:4}]},
+    options:{...darkDefaults,responsive:true,
+      plugins:{...darkDefaults.plugins,tooltip:{...darkDefaults.plugins.tooltip,callbacks:{label:ctx=>` ${ctx.parsed.y.toFixed(1)}%`}}},
+      scales:{...darkDefaults.scales,y:{...darkDefaults.scales.y,ticks:{color:'#718096',callback:v=>v+'%'}}}
+    }
+  });
+
+  let rows='';
+  for (const m of activeM) {
+    const mi=m-1;
+    const mInc=monthly2026Inc[m]||0, mExp=monthly2026Exp[m]||0;
+    const mSav=mInc-mExp, mRate=mInc>0?(mSav/mInc)*100:0;
+    const savSign = mSav>=0?`<span class="positive">+${fmt(mSav)}</span>`:`<span class="negative">${fmt(mSav)}</span>`;
+    const catMap = monthly2026Cat[m]||{};
+    const topCat = Object.entries(catMap).sort((a,b)=>b[1]-a[1])[0];
+    rows+=`<tr>
+      <td><strong>${MONTHS_LABEL[mi]}</strong></td>
+      <td class="num">${fmt(mInc)}</td>
+      <td class="num">${fmt(mExp)}</td>
+      <td class="num">${savSign}</td>
+      <td class="num"><span class="savings-badge ${savingsClass(mRate)}">${pct(mRate)}</span></td>
+      <td class="neutral" style="font-size:12px;">${topCat?`${topCat[0]} (${fmt(topCat[1])})`:''}</td>
+    </tr>`;
+  }
+  document.getElementById('monthly-table-body').innerHTML=rows;
+}
+
+// ─── VIEW: INCOME SOURCES ────────────────────────────────────────────────────
+function renderIncome() {
+  const allSources = Object.keys(srcByYear).sort();
+  const totalInc = YEARS.reduce((s,y)=>(annualInc[y]||0)+s,0);
+  const peak = Math.max(...YEARS.map(y=>annualInc[y]||0));
+  const peakYear = YEARS.find(y=>(annualInc[y]||0)===peak);
+
+  document.getElementById('kpi-income').innerHTML=`
+    <div class="kpi blue"><div class="label">Total Income 2020–2026</div><div class="value">${fmtK(totalInc)}</div><div class="sub">7-year cumulative</div></div>
+    <div class="kpi green"><div class="label">Peak Year</div><div class="value">${peakYear}</div><div class="sub">${fmt(peak)} household income</div></div>
+    <div class="kpi yellow"><div class="label">2026 YTD Income</div><div class="value">${fmtK(annualInc[2026]||0)}</div><div class="sub">Jan–Jun 2026</div></div>
+  `;
+
+  const colors = allSources.map((_,i)=>PALETTE[i%PALETTE.length]);
+  const labels = YEARS.map(y=>y===2026?'2026 YTD':String(y));
+
+  mkChart('incomeBar',{
+    type:'bar',
+    data:{labels, datasets:allSources.map((src,i)=>({
+      label:src, data:YEARS.map(y=>srcByYear[src][y]||0),
+      backgroundColor:colors[i]+'88', borderColor:colors[i], borderWidth:1
+    }))},
+    options:{...darkDefaults,responsive:true,interaction:{mode:'index'},
+      plugins:{...darkDefaults.plugins,tooltip:{...darkDefaults.plugins.tooltip,
+        callbacks:{label:ctx=>ctx.parsed.y>0?` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`:null}
+      }},
+      scales:{...darkDefaults.scales,x:{...darkDefaults.scales.x,stacked:true},y:{...darkDefaults.scales.y,stacked:true}}
+    }
+  });
+
+  // 2026 YTD income pie
+  const ytd2026 = allSources.map(src=>({src,amt:srcByYear[src][2026]||0})).filter(d=>d.amt>0);
+  mkChart('incomePie',{
+    type:'doughnut',
+    data:{labels:ytd2026.map(d=>d.src),datasets:[{
+      data:ytd2026.map(d=>d.amt),
+      backgroundColor:ytd2026.map((_,i)=>PALETTE[i%PALETTE.length]+'cc'),
+      borderColor:'#0f1117',borderWidth:2
+    }]},
+    options:{responsive:true,plugins:{
+      legend:{labels:{color:'#a0aec0',boxWidth:10,font:{size:10}}},
+      tooltip:{backgroundColor:'#1a1d2e',borderColor:'#2d3748',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#a0aec0',
+        callbacks:{label:ctx=>`  ${ctx.label}: ${fmt(ctx.parsed)}`}}
+    }}
+  });
+
+  // Table
+  const hYears = YEARS.map(y=>y===2026?'2026 YTD':String(y));
+  document.getElementById('income-table-head').innerHTML=`<tr><th>Source</th>${hYears.map(y=>`<th class="num">${y}</th>`).join('')}<th class="num">Total</th></tr>`;
+
+  let rows='';
+  const sortedSrc = allSources.sort((a,b)=>{
+    const ta=YEARS.reduce((s,y)=>(srcByYear[a][y]||0)+s,0);
+    const tb=YEARS.reduce((s,y)=>(srcByYear[b][y]||0)+s,0);
+    return tb-ta;
+  });
+  for (const src of sortedSrc) {
+    const totSrc = YEARS.reduce((s,y)=>(srcByYear[src][y]||0)+s,0);
+    rows+=`<tr>
+      <td><strong>${src}</strong></td>
+      ${YEARS.map(y=>{const v=srcByYear[src][y]||0;return`<td class="num">${v>0?fmt(v):'—'}</td>`;}).join('')}
+      <td class="num"><strong>${fmt(totSrc)}</strong></td>
+    </tr>`;
+  }
+  // Totals row
+  rows+=`<tr style="border-top:2px solid #4a5568;">
+    <td><strong>Total</strong></td>
+    ${YEARS.map(y=>`<td class="num"><strong>${fmt(annualInc[y]||0)}</strong></td>`).join('')}
+    <td class="num"><strong>${fmt(totalInc)}</strong></td>
+  </tr>`;
+  document.getElementById('income-table-body').innerHTML=rows;
+}
+
+// ─── VIEW: NANNA ACCOUNT ─────────────────────────────────────────────────────
+function renderNanna() {
+  const nannaByYear={}, nannaBySrc={};
+  for (const r of nannaRows) {
+    nannaByYear[r.year]=(nannaByYear[r.year]||0)+r.amount;
+    nannaBySrc[r.source]=(nannaBySrc[r.source]||0)+r.amount;
+  }
+  const total=Object.values(nannaByYear).reduce((s,v)=>s+v,0);
+  const years=Object.keys(nannaByYear).map(Number).sort();
+  const peak=Math.max(...Object.values(nannaByYear));
+  const peakY=years.find(y=>nannaByYear[y]===peak);
+
+  document.getElementById('kpi-nanna').innerHTML=`
+    <div class="kpi purple"><div class="label">Total Nanna / India Income</div><div class="value">${fmtK(total)}</div><div class="sub">${years[0]}–${years[years.length-1]}</div></div>
+    <div class="kpi yellow"><div class="label">Peak Year</div><div class="value">${peakY||'—'}</div><div class="sub">${peakY?fmt(peak):''}</div></div>
+    <div class="kpi orange"><div class="label">Transactions</div><div class="value">${nannaRows.length}</div><div class="sub">total entries</div></div>
+  `;
+
+  const allYears=YEARS.filter(y=>years.includes(y));
+  const labels=allYears.map(y=>y===2026?'2026 YTD':String(y));
+  mkChart('nannaBar',{
+    type:'bar',
+    data:{labels,datasets:[{label:'India Income',data:allYears.map(y=>nannaByYear[y]||0),backgroundColor:'#b794f488',borderColor:'#b794f4',borderWidth:1,borderRadius:4}]},
+    options:{...darkDefaults,responsive:true,plugins:{...darkDefaults.plugins,legend:{display:false}}}
+  });
+
+  const srcs=Object.entries(nannaBySrc).filter(([_,v])=>v>0);
+  mkChart('nannaPie',{
+    type:'doughnut',
+    data:{labels:srcs.map(d=>d[0]),datasets:[{data:srcs.map(d=>d[1]),backgroundColor:srcs.map((_,i)=>PALETTE[i%PALETTE.length]+'cc'),borderColor:'#0f1117',borderWidth:2}]},
+    options:{responsive:true,plugins:{
+      legend:{labels:{color:'#a0aec0',boxWidth:10,font:{size:10}}},
+      tooltip:{backgroundColor:'#1a1d2e',borderColor:'#2d3748',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#a0aec0',
+        callbacks:{label:ctx=>`  ${ctx.label}: ${fmt(ctx.parsed)}`}}
+    }}
+  });
+
+  const sorted=[...nannaRows].sort((a,b)=>b.year-a.year||b.amount-a.amount);
+  let rows='';
+  for (const r of sorted) {
+    rows+=`<tr>
+      <td>${r.year===2026?'2026 YTD':r.year}</td>
+      <td>${r.source}</td>
+      <td class="num purple-text">${fmt(r.amount)}</td>
+      <td class="neutral" style="font-size:12px;">${r.notes||''}</td>
+    </tr>`;
+  }
+  document.getElementById('nanna-table-body').innerHTML=rows||'<tr><td colspan="4" class="neutral">No data</td></tr>';
+}
+
+// ─── VIEW: CATEGORY TRENDS ───────────────────────────────────────────────────
+function populateTrendCats() {
+  const cats = Object.keys(catByYear).sort();
+  const sel  = document.getElementById('trend-category');
+  sel.innerHTML = cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+}
+
+function renderTrends() {
+  const cat = document.getElementById('trend-category').value;
+  const data = catByYear[cat]||{};
+  const years = YEARS.filter(y=>y<2026);
+  const ytd   = data[2026]||0;
+  const labels = [...years.map(String),'2026 YTD'];
+  const vals  = [...years.map(y=>data[y]||0), ytd];
+
+  document.getElementById('trend-title').textContent=`${cat} — Annual Spend`;
+  mkChart('trendLine',{
+    type:'line',
+    data:{labels,datasets:[{label:cat,data:vals,borderColor:'#63b3ed',backgroundColor:'#63b3ed22',pointBackgroundColor:'#63b3ed',tension:0.3,fill:true}]},
+    options:{...darkDefaults,responsive:true,
+      plugins:{...darkDefaults.plugins,legend:{display:false}},
+      scales:{...darkDefaults.scales,y:{...darkDefaults.scales.y,beginAtZero:true}}
+    }
+  });
+
+  // All-cats table
+  const allCats=Object.keys(catByYear).sort((a,b)=>{
+    const ta=YEARS.reduce((s,y)=>(catByYear[a][y]||0)+s,0);
+    const tb=YEARS.reduce((s,y)=>(catByYear[b][y]||0)+s,0);
+    return tb-ta;
+  });
+
+  document.getElementById('trends-table-head').innerHTML=`<tr><th>Category</th>${YEARS.map(y=>`<th class="num">${y===2026?'2026 YTD':y}</th>`).join('')}<th class="num">Total</th></tr>`;
+
+  let rows='';
+  for (const c of allCats) {
+    const cd=catByYear[c];
+    const tot=YEARS.reduce((s,y)=>(cd[y]||0)+s,0);
+    rows+=`<tr>
+      <td style="cursor:pointer;color:${c===cat?'#63b3ed':'inherit'}" onclick="document.getElementById('trend-category').value='${c.replace(/'/g,"\\'")}';renderTrends();">${c}</td>
+      ${YEARS.map(y=>{const v=cd[y]||0;return`<td class="num">${v>0?fmt(v):'—'}</td>`;}).join('')}
+      <td class="num"><strong>${fmt(tot)}</strong></td>
+    </tr>`;
+  }
+  document.getElementById('trends-table-body').innerHTML=rows;
+}
+
+// ─── ONE-TIME EXPENSE DETECTOR ───────────────────────────────────────────────
+// Categories that are inherently non-recurring — any spend here gets flagged
+const IRREGULAR_CATS = new Set([
+  'Vacation','Furniture','Home Improvements','Festivals & Events',
+  'Electronics','Learning','Car maintenance','Achi expenses','Baby Expenses'
+]);
+
+function median(arr) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a,b) => a-b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2;
+}
+
+function detectOneTimeExpenses(curYear, curMonth) {
+  const curTxs  = expRows.filter(r => r.year === curYear && r.month === curMonth);
+  const histTxs = expRows.filter(r => !(r.year === curYear && r.month === curMonth));
+
+  // Build per-category historical stats
+  const stats = {};
+  for (const tx of histTxs) {
+    if (!stats[tx.cat]) stats[tx.cat] = { txAmts: [], monthTotals: {} };
+    stats[tx.cat].txAmts.push(tx.amount);
+    const key = `${tx.year}-${tx.month}`;
+    stats[tx.cat].monthTotals[key] = (stats[tx.cat].monthTotals[key] || 0) + tx.amount;
+  }
+  for (const cat in stats) {
+    const s = stats[cat];
+    s.medTx    = median(s.txAmts);
+    s.meanTx   = s.txAmts.reduce((a,b) => a+b,0) / s.txAmts.length;
+    s.maxTx    = Math.max(...s.txAmts);
+    const mv   = Object.values(s.monthTotals);
+    s.avgMonth = mv.reduce((a,b) => a+b,0) / mv.length;
+    s.moCount  = mv.length;   // how many distinct months this category appeared
+  }
+
+  const flagged = [];
+  const flaggedCats = new Set();
+
+  // ── Pass 1: individual transactions ──────────────────────────────────────
+  for (const tx of curTxs.sort((a,b) => b.amount - a.amount)) {
+    if (tx.amount < 100) continue;
+    const s = stats[tx.cat];
+    let reason = null, severity = 'warn', baseline = null;
+
+    if (!s) {
+      // Brand-new category — never seen in history
+      if (tx.amount >= 50) { reason = 'New / never seen before'; severity = 'warn'; }
+    } else if (IRREGULAR_CATS.has(tx.cat)) {
+      // Inherently non-recurring category
+      reason = 'Non-recurring category';
+      severity = tx.amount > 500 ? 'bad' : 'warn';
+      baseline = s.avgMonth > 0 ? s.avgMonth : null;
+    } else if (s.medTx > 0 && tx.amount >= s.medTx * 2.5 && tx.amount >= 300) {
+      // Single transaction is 2.5× the typical for this category
+      const mult = (tx.amount / s.medTx).toFixed(1);
+      reason = `${mult}× typical ${tx.cat} transaction`;
+      severity = tx.amount >= s.medTx * 4 ? 'bad' : 'warn';
+      baseline = s.medTx;
+    } else if (s.moCount <= 4 && tx.amount >= 200) {
+      // Category only appeared in ≤4 months historically — treat as sporadic
+      reason = `Sporadic (appears ${s.moCount} months in history)`;
+      severity = 'warn';
+      baseline = s.avgMonth;
+    }
+
+    if (reason) {
+      flagged.push({ vendor: tx.vendor, cat: tx.cat, amount: tx.amount, reason, severity, baseline });
+      flaggedCats.add(tx.cat);
+    }
+  }
+
+  // ── Pass 2: category-level monthly spike (catches multi-tx surges) ────────
+  const curCatTotals = monthly2026Cat[curMonth] || {};
+  for (const [cat, curTotal] of Object.entries(curCatTotals)) {
+    if (flaggedCats.has(cat)) continue;   // already flagged by pass 1
+    if (curTotal < 300) continue;
+    const s = stats[cat];
+    if (!s || s.avgMonth <= 0) continue;
+    const spike = curTotal / s.avgMonth;
+    if (spike >= 2.5) {
+      const mult = spike.toFixed(1);
+      flagged.push({
+        vendor: 'Multiple transactions',
+        cat,
+        amount: curTotal,
+        reason: `${mult}× typical monthly total`,
+        severity: spike >= 4 ? 'bad' : 'warn',
+        baseline: s.avgMonth
+      });
+      flaggedCats.add(cat);
+    }
+  }
+
+  return flagged.sort((a,b) => b.amount - a.amount).slice(0, 12);
+}
+
+// ─── VIEW: THIS MONTH ────────────────────────────────────────────────────────
+function renderThisMonth() {
+  const now       = new Date();
+  const curYear   = now.getFullYear();
+  const curMonth  = now.getMonth() + 1;           // 1-based
+  const daysInMo  = new Date(curYear, curMonth, 0).getDate();
+  const daysGone  = now.getDate();
+  const daysLeft  = daysInMo - daysGone;
+  const moLabel   = MONTHS_LABEL[curMonth - 1];
+  const pctDone   = Math.round((daysGone / daysInMo) * 100);
+
+  // This month totals (2026 data)
+  const mtdExp    = (curYear === 2026 ? monthly2026Exp[curMonth] : 0) || 0;
+  const mtdInc    = (curYear === 2026 ? monthly2026Inc[curMonth] : 0) || 0;
+  const mtdCats   = (curYear === 2026 ? monthly2026Cat[curMonth] : {}) || {};
+  const mtdSav    = mtdInc - mtdExp;
+  const mtdRate   = mtdInc > 0 ? (mtdSav / mtdInc) * 100 : 0;
+
+  // Daily rate & projection
+  const dailyRate    = daysGone > 0 ? mtdExp / daysGone : 0;
+  const projectedExp = dailyRate * daysInMo;
+
+  // Last 3 months data
+  const prev3 = [];
+  for (let i = 1; i <= 3; i++) {
+    let mo = curMonth - i, yr = curYear;
+    if (mo <= 0) { mo += 12; yr--; }
+    const exp  = (yr === 2026 ? monthly2026Exp[mo] : 0) || 0;
+    const inc  = (yr === 2026 ? monthly2026Inc[mo] : 0) || 0;
+    const cats = (yr === 2026 ? monthly2026Cat[mo] : {}) || {};
+    prev3.push({ mo, yr, exp, inc, cats, label: MONTHS_LABEL[mo-1] });
+  }
+  const avg3Exp = prev3.length ? prev3.reduce((s,m) => s + m.exp, 0) / prev3.length : 0;
+  const avg3Inc = prev3.length ? prev3.reduce((s,m) => s + m.inc, 0) / prev3.length : 0;
+
+  // Pace status
+  const paceVsAvg  = avg3Exp > 0 ? projectedExp / avg3Exp : 1;
+  const paceLabel  = paceVsAvg > 1.15 ? '🔴 Over pace'
+                   : paceVsAvg > 1.05 ? '🟡 Slightly over'
+                   : '🟢 On track';
+
+  // KPI cards
+  document.getElementById('kpi-thismonth').innerHTML = `
+    <div class="kpi blue">
+      <div class="label">${moLabel} Income (MTD)</div>
+      <div class="value">${fmtK(mtdInc)}</div>
+      <div class="sub">${daysGone} of ${daysInMo} days · ${daysLeft} days left</div>
+    </div>
+    <div class="kpi red">
+      <div class="label">${moLabel} Expenses (MTD)</div>
+      <div class="value">${fmtK(mtdExp)}</div>
+      <div class="sub">${fmtK(dailyRate)}/day · Projected ${fmtK(projectedExp)} by month-end</div>
+    </div>
+    <div class="kpi ${mtdSav >= 0 ? 'green' : 'red'}">
+      <div class="label">${moLabel} Saved (MTD)</div>
+      <div class="value">${mtdSav >= 0 ? '+' : ''}${fmtK(mtdSav)}</div>
+      <div class="sub"><span class="savings-badge ${savingsClass(mtdRate)}">${pct(mtdRate)}</span> savings rate</div>
+    </div>
+    <div class="kpi ${paceVsAvg > 1.15 ? 'red' : paceVsAvg > 1.05 ? 'orange' : 'green'}">
+      <div class="label">Monthly Pace vs 3-Mo Avg</div>
+      <div class="value">${paceLabel}</div>
+      <div class="sub">Projected ${fmtK(projectedExp)} vs ${fmtK(avg3Exp)} avg · ${pct(pctDone)} of month done</div>
+    </div>
+  `;
+
+  // ── One-time / non-recurring detection ───────────────────────────────────
+  document.getElementById('onetime-title').textContent =
+    `🔔 One-Time & Non-Recurring Expenses — ${moLabel} ${curYear}`;
+
+  const oneTime = detectOneTimeExpenses(curYear, curMonth);
+  const oBody = document.getElementById('thismonth-onetime-body');
+  const oNote = document.getElementById('onetime-note');
+
+  if (oneTime.length === 0) {
+    oBody.innerHTML = '';
+    oNote.textContent = '✅ No unusual one-time expenses detected this month — spending looks routine across all categories.';
+    oNote.style.display = 'block';
+  } else {
+    oNote.style.display = 'none';
+    let oRows = '';
+    for (const e of oneTime) {
+      const badgeCls = e.severity === 'bad' ? 'bad' : 'warn';
+      const flag = e.severity === 'bad' ? '🔴' : '🟡';
+      const baselineStr = e.baseline != null
+        ? `<span class="neutral">(baseline ${fmt(e.baseline)})</span>`
+        : '';
+      oRows += `<tr>
+        <td><strong>${e.cat}</strong></td>
+        <td class="neutral" style="font-size:12px;">${e.vendor || '—'}</td>
+        <td class="num negative"><strong>${fmt(e.amount)}</strong></td>
+        <td style="font-size:12px;">${flag} ${e.reason}</td>
+        <td class="num" style="font-size:12px;">${baselineStr}</td>
+      </tr>`;
+    }
+    oBody.innerHTML = oRows;
+  }
+
+  // ── Category bar: this month vs 3-month average ───────────────────────────
+  const allCatsSet = new Set([
+    ...Object.keys(mtdCats),
+    ...prev3.flatMap(m => Object.keys(m.cats))
+  ]);
+  const catData = Array.from(allCatsSet).map(cat => {
+    const cur = mtdCats[cat] || 0;
+    const avg = prev3.length ? prev3.reduce((s,m) => s + (m.cats[cat]||0), 0) / prev3.length : 0;
+    return { cat, cur, avg };
+  }).filter(d => d.cur > 0 || d.avg > 50)
+    .sort((a, b) => b.cur - a.cur);
+
+  document.getElementById('thismonth-cat-title').textContent =
+    `Category Spend — ${moLabel} vs 3-Month Average (${prev3.map(m=>m.label).reverse().join(', ')})`;
+
+  mkChart('thisMonthCatBar', {
+    type: 'bar',
+    data: {
+      labels: catData.map(d => d.cat),
+      datasets: [
+        { label: moLabel + ' (MTD)', data: catData.map(d => d.cur),
+          backgroundColor: '#63b3ed99', borderColor: '#63b3ed', borderWidth: 1 },
+        { label: '3-Mo Avg', data: catData.map(d => d.avg),
+          backgroundColor: '#a0aec044', borderColor: '#a0aec0', borderWidth: 1, borderDash: [4,2] },
+      ]
+    },
+    options: { ...darkDefaults, responsive: true, interaction: { mode: 'index' },
+      plugins: { ...darkDefaults.plugins,
+        tooltip: { ...darkDefaults.plugins.tooltip,
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#718096', font: { size: 10 } }, grid: { color: '#1e2433' } },
+        y: { ticks: { color: '#718096', callback: v => fmtK(v) }, grid: { color: '#1e2433' } }
+      }
+    }
+  });
+
+  // ── Monthly pace bar: last 3 months + this month actual + projected ────────
+  const paceLabels = [...prev3.map(m => m.label).reverse(), moLabel + ' MTD', moLabel + ' Proj'];
+  const paceExpData = [...prev3.map(m => m.exp).reverse(), mtdExp, projectedExp];
+  const paceIncData = [...prev3.map(m => m.inc).reverse(), mtdInc, null];
+  const paceColors  = paceExpData.map((_,i) =>
+    i < prev3.length ? '#fc818166' : i === prev3.length ? '#fc8181bb' : '#fc818133'
+  );
+  const paceBorderColors = paceExpData.map((_,i) =>
+    i < prev3.length ? '#fc8181' : i === prev3.length ? '#fc8181' : '#fc818188'
+  );
+
+  mkChart('thisMonthPace', {
+    type: 'bar',
+    data: {
+      labels: paceLabels,
+      datasets: [
+        { label: 'Expenses', data: paceExpData, backgroundColor: paceColors, borderColor: paceBorderColors, borderWidth: 1 },
+        { label: 'Income', data: paceIncData, type: 'line', borderColor: '#63b3ed', backgroundColor: 'transparent',
+          pointBackgroundColor: '#63b3ed', tension: 0.3, spanGaps: true }
+      ]
+    },
+    options: { ...darkDefaults, responsive: true, interaction: { mode: 'index' },
+      plugins: { ...darkDefaults.plugins,
+        tooltip: { ...darkDefaults.plugins.tooltip,
+          callbacks: { label: ctx => ctx.parsed.y != null ? ` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` : null }
+        }
+      }
+    }
+  });
+
+  // ── Outlier table ─────────────────────────────────────────────────────────
+  const outliers = catData
+    .filter(d => d.cur > 100 && (d.avg === 0 || d.cur > d.avg * 1.3))
+    .sort((a, b) => (b.cur - b.avg) - (a.cur - a.avg));
+
+  let outRows = '';
+  for (const o of outliers) {
+    const delta = o.cur - o.avg;
+    const ratio = o.avg > 0 ? (o.cur / o.avg) : null;
+    const badge = o.avg === 0
+      ? '<span class="savings-badge bad">New this month</span>'
+      : ratio > 2
+        ? `<span class="savings-badge bad">${ratio.toFixed(1)}× avg</span>`
+        : `<span class="savings-badge warn">${ratio.toFixed(1)}× avg</span>`;
+    outRows += `<tr>
+      <td>${o.cat}</td>
+      <td class="num">${fmt(o.cur)}</td>
+      <td class="num neutral">${o.avg > 0 ? fmt(o.avg) : '—'}</td>
+      <td class="num negative">+${fmt(delta)}</td>
+    </tr><tr style="display:none;"></tr>`;
+    // add badge inline
+    outRows = outRows.replace('</td>\n    </tr>', `</td>\n      <td>${badge}</td>\n    </tr>`);
+  }
+  // rebuild with badge column
+  outRows = '';
+  document.querySelector('#thismonth-outliers-body').closest('.table-box').querySelector('thead tr').innerHTML =
+    '<th>Category</th><th class="num">This Month</th><th class="num">3-Mo Avg</th><th class="num">Δ vs Avg</th><th>Flag</th>';
+  for (const o of outliers) {
+    const delta = o.cur - o.avg;
+    const ratio = o.avg > 0 ? o.cur / o.avg : null;
+    const badge = o.avg === 0
+      ? '<span class="savings-badge bad">New</span>'
+      : ratio > 2
+        ? `<span class="savings-badge bad">${ratio.toFixed(1)}× avg</span>`
+        : `<span class="savings-badge warn">${ratio.toFixed(1)}× avg</span>`;
+    outRows += `<tr>
+      <td>${o.cat}</td>
+      <td class="num">${fmt(o.cur)}</td>
+      <td class="num neutral">${o.avg > 0 ? fmt(o.avg) : '—'}</td>
+      <td class="num negative">+${fmt(delta)}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }
+  document.getElementById('thismonth-outliers-body').innerHTML =
+    outRows || '<tr><td colspan="5" class="neutral" style="padding:14px;">No significant outliers this month 🎉</td></tr>';
+
+  // ── All categories table ──────────────────────────────────────────────────
+  const sortedCats = Object.entries(mtdCats)
+    .filter(([,v]) => v > 0)
+    .sort((a,b) => b[1] - a[1]);
+  const catTotal = sortedCats.reduce((s,[,v]) => s + v, 0);
+
+  document.getElementById('thismonth-cattable-title').textContent =
+    `All Categories — ${moLabel} (${daysGone} days)`;
+
+  let catRows = '';
+  for (const [cat, amt] of sortedCats) {
+    const sharePct = catTotal > 0 ? (amt / catTotal) * 100 : 0;
+    catRows += `<tr>
+      <td>${cat}</td>
+      <td class="num">${fmt(amt)}</td>
+      <td class="num">${pct(sharePct)}</td>
+    </tr>`;
+  }
+  document.getElementById('thismonth-allcats-body').innerHTML =
+    catRows || '<tr><td colspan="3" class="neutral">No data</td></tr>';
+}
+
+// ─── TAB SWITCHING ───────────────────────────────────────────────────────────
+function showView(name, btn) {
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ─── MAIN LOAD ───────────────────────────────────────────────────────────────
+async function fetchCSV(url) {
+  const res = await fetch(url, {cache:'no-store'});
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+  return res.text();
+}
+
+async function init() {
+  try {
+    document.getElementById('loading-detail').textContent = 'Fetching Income & Expenses sheets via JSONP (bypasses CORS & filter views)…';
+
+    const [expTable, incTable] = await Promise.all([
+      fetchGvizJSON('Expenses'),
+      fetchGvizJSON('Income')
+    ]);
+
+    document.getElementById('loading-detail').textContent = 'Processing data…';
+
+    processExpenses(expTable);
+    processIncome(incTable);
+
+    // Badge
+    const expCount = expRows.length;
+    const incCount = incRows.length + nannaRows.length;
+    const now = new Date();
+    document.getElementById('data-badge').textContent = `${expCount+incCount} rows · refreshed ${now.toLocaleTimeString()}`;
+
+    // Populate controls
+    populateBreakdownYears();
+    populateTrendCats();
+
+    // Render all views
+    renderThisMonth();
+    renderOverview();
+    renderBreakdown();
+    renderMonthly();
+    renderIncome();
+    renderNanna();
+    renderTrends();
+
+    // Show app (This Month tab is already active by default)
+    document.getElementById('loading-overlay').style.display='none';
+    document.getElementById('app').style.display='block';
+
+  } catch(err) {
+    console.error('Dashboard load error:', err);
+    document.getElementById('loading-overlay').style.display='none';
+    document.getElementById('error-msg').textContent = err.message || String(err);
+    document.getElementById('error-overlay').style.display='flex';
+  }
+}
+
+init();
+</script>
+</body>
+</html>
