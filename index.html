@@ -159,7 +159,7 @@
   <div class="table-box" style="margin-bottom:20px;">
     <h3 id="onetime-title">🔔 One-Time &amp; Non-Recurring Expenses</h3>
     <table>
-      <thead><tr><th>Category</th><th>Vendor</th><th class="num">Amount</th><th>Why Flagged</th><th class="num">Baseline</th></tr></thead>
+      <thead><tr><th>Month</th><th>Category</th><th>Vendor</th><th class="num">Amount</th><th>Why Flagged</th><th class="num">Baseline</th></tr></thead>
       <tbody id="thismonth-onetime-body"></tbody>
     </table>
     <div class="note" id="onetime-note" style="display:none;"></div>
@@ -351,6 +351,7 @@ const norm     = s => CAT_ALIAS[s]||s;
 const normSrc  = s => SRC_ALIAS[s]||s;
 const savCls   = r => r>=25?'good':r>=10?'warn':'bad';
 const med      = arr => { if(!arr.length)return 0; const s=[...arr].sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
+function topVendor(cat) { const v={}; for(const r of expRows){if(r.cat===cat&&r.vendor)v[r.vendor]=(v[r.vendor]||0)+r.amount;} return Object.entries(v).sort((a,b)=>b[1]-a[1])[0]?.[0]||''; }
 
 // ── Global state ─────────────────────────────────────────────────────────────
 let expRows=[], incRows=[], nannaRows=[];
@@ -429,39 +430,51 @@ const dk = {
   scales:{ x:{ticks:{color:'#718096'},grid:{color:'#1e2433'}}, y:{ticks:{color:'#718096',callback:v=>fmtK(v)},grid:{color:'#1e2433'}} }
 };
 
-// ── One-time expense detector ─────────────────────────────────────────────────
-function detectOneTime(curYear, curMonth) {
-  const curTxs  = expRows.filter(r=>r.year===curYear&&r.month===curMonth);
-  const histTxs = expRows.filter(r=>!(r.year===curYear&&r.month===curMonth));
-  const stats={};
-  for (const tx of histTxs) {
-    if (!stats[tx.cat]) stats[tx.cat]={txAmts:[],monthTotals:{}};
-    stats[tx.cat].txAmts.push(tx.amount);
-    const k=`${tx.year}-${tx.month}`;
-    stats[tx.cat].monthTotals[k]=(stats[tx.cat].monthTotals[k]||0)+tx.amount;
+// ── One-time expense detector — last 12 months ────────────────────────────────
+function detectOneTime12Mo() {
+  const now=new Date(), cy=now.getFullYear(), cm=now.getMonth()+1;
+  const last12=[];
+  for (let i=0;i<12;i++) { let mo=cm-i,yr=cy; if(mo<=0){mo+=12;yr--;} last12.push({yr,mo}); }
+  const allFlagged=[];
+  for (const {yr,mo} of last12) {
+    const curTxs=expRows.filter(r=>r.year===yr&&r.month===mo);
+    if (!curTxs.length) continue;
+    const histTxs=expRows.filter(r=>!(r.year===yr&&r.month===mo));
+    const stats={};
+    for (const tx of histTxs) {
+      if (!stats[tx.cat]) stats[tx.cat]={txAmts:[],monthTotals:{}};
+      stats[tx.cat].txAmts.push(tx.amount);
+      const k=`${tx.year}-${tx.month}`;
+      stats[tx.cat].monthTotals[k]=(stats[tx.cat].monthTotals[k]||0)+tx.amount;
+    }
+    for (const cat in stats) {
+      const s=stats[cat],mv=Object.values(s.monthTotals);
+      s.medTx=med(s.txAmts); s.avgMonth=mv.reduce((a,b)=>a+b,0)/mv.length; s.moCount=mv.length;
+    }
+    const flagged=[],flaggedCats=new Set();
+    // Pass 1: individual transactions
+    for (const tx of curTxs.sort((a,b)=>b.amount-a.amount)) {
+      if (tx.amount<100) continue;
+      const s=stats[tx.cat]; let reason=null,sev='warn',baseline=null;
+      const vendor=tx.vendor||topVendor(tx.cat);
+      if (!s) { if(tx.amount>=50){reason='New category — never seen before';} }
+      else if (IRREGULAR.has(tx.cat)) { reason='Non-recurring category'; sev=tx.amount>500?'bad':'warn'; baseline=s.avgMonth>0?s.avgMonth:null; }
+      else if (s.medTx>0&&tx.amount>=s.medTx*2.5&&tx.amount>=300) { reason=`${(tx.amount/s.medTx).toFixed(1)}× typical transaction`; sev=tx.amount>=s.medTx*4?'bad':'warn'; baseline=s.medTx; }
+      else if (s.moCount<=4&&tx.amount>=200) { reason=`Sporadic (${s.moCount} months in history)`; baseline=s.avgMonth; }
+      if (reason) { flagged.push({vendor,cat:tx.cat,amount:tx.amount,reason,sev,baseline}); flaggedCats.add(tx.cat); }
+    }
+    // Pass 2: category-level monthly spikes
+    const curCatTotals={};
+    for (const tx of curTxs) curCatTotals[tx.cat]=(curCatTotals[tx.cat]||0)+tx.amount;
+    for (const [cat,curTotal] of Object.entries(curCatTotals)) {
+      if (flaggedCats.has(cat)||curTotal<300) continue;
+      const s=stats[cat]; if(!s||s.avgMonth<=0) continue;
+      const sp=curTotal/s.avgMonth;
+      if (sp>=2.5) { flagged.push({vendor:topVendor(cat)||'Multiple',cat,amount:curTotal,reason:`${sp.toFixed(1)}× typical monthly`,sev:sp>=4?'bad':'warn',baseline:s.avgMonth}); flaggedCats.add(cat); }
+    }
+    flagged.sort((a,b)=>b.amount-a.amount).slice(0,6).forEach(f=>allFlagged.push({...f,yr,mo}));
   }
-  for (const cat in stats) {
-    const s=stats[cat], mv=Object.values(s.monthTotals);
-    s.medTx=med(s.txAmts); s.meanTx=s.txAmts.reduce((a,b)=>a+b,0)/s.txAmts.length;
-    s.avgMonth=mv.reduce((a,b)=>a+b,0)/mv.length; s.moCount=mv.length;
-  }
-  const flagged=[], flaggedCats=new Set();
-  for (const tx of curTxs.sort((a,b)=>b.amount-a.amount)) {
-    if (tx.amount<100) continue;
-    const s=stats[tx.cat]; let reason=null,sev='warn',baseline=null;
-    if (!s) { if(tx.amount>=50){reason='New category — never seen before';} }
-    else if (IRREGULAR.has(tx.cat)) { reason='Non-recurring category'; sev=tx.amount>500?'bad':'warn'; baseline=s.avgMonth>0?s.avgMonth:null; }
-    else if (s.medTx>0&&tx.amount>=s.medTx*2.5&&tx.amount>=300) { reason=`${(tx.amount/s.medTx).toFixed(1)}× typical transaction`; sev=tx.amount>=s.medTx*4?'bad':'warn'; baseline=s.medTx; }
-    else if (s.moCount<=4&&tx.amount>=200) { reason=`Sporadic (${s.moCount} months in history)`; baseline=s.avgMonth; }
-    if (reason) { flagged.push({vendor:tx.vendor,cat:tx.cat,amount:tx.amount,reason,sev,baseline}); flaggedCats.add(tx.cat); }
-  }
-  for (const [cat,curTotal] of Object.entries(monthly2026Cat[curMonth]||{})) {
-    if (flaggedCats.has(cat)||curTotal<300) continue;
-    const s=stats[cat]; if (!s||s.avgMonth<=0) continue;
-    const sp=curTotal/s.avgMonth;
-    if (sp>=2.5) { flagged.push({vendor:'Multiple transactions',cat,amount:curTotal,reason:`${sp.toFixed(1)}× typical monthly`,sev:sp>=4?'bad':'warn',baseline:s.avgMonth}); }
-  }
-  return flagged.sort((a,b)=>b.amount-a.amount).slice(0,12);
+  return allFlagged.sort((a,b)=>b.yr-a.yr||b.mo-a.mo||b.amount-a.amount);
 }
 
 // ── VIEW: This Month ──────────────────────────────────────────────────────────
@@ -477,9 +490,17 @@ function renderThisMonth() {
   const dailyRate=daysGone>0?mtdExp/daysGone:0, projExp=dailyRate*daysInMo;
 
   const prev3=[];
-  for (let i=1;i<=3;i++) { let mo=cm-i,yr=cy; if(mo<=0){mo+=12;yr--;} const exp=(yr===2026?monthly2026Exp[mo]:0)||0,inc=(yr===2026?monthly2026Inc[mo]:0)||0,cats=(yr===2026?monthly2026Cat[mo]:{})||{}; prev3.push({mo,yr,exp,inc,cats,label:MONTHS_LBL[mo-1]}); }
-  const avg3Exp=prev3.length?prev3.reduce((s,m)=>s+m.exp,0)/prev3.length:0;
-  const paceVsAvg=avg3Exp>0?projExp/avg3Exp:1;
+  for (let i=1;i<=3;i++) { let mo=cm-i,yr2=cy; if(mo<=0){mo+=12;yr2--;} const exp=(yr2===2026?monthly2026Exp[mo]:0)||0,inc=(yr2===2026?monthly2026Inc[mo]:0)||0,cats=(yr2===2026?monthly2026Cat[mo]:{})||{}; prev3.push({mo,yr:yr2,exp,inc,cats,label:MONTHS_LBL[mo-1]}); }
+  // 3-month avg excluding one-time outlier categories so pace comparison is apples-to-apples
+  const oneTimeCats12=new Set(detectOneTime12Mo().map(f=>f.cat));
+  function expExcludingOutliers(moData) {
+    if (!moData) return 0;
+    return Object.entries(moData).reduce((s,[cat,amt])=>oneTimeCats12.has(cat)?s:s+amt,0);
+  }
+  const avg3Exp=prev3.length?prev3.reduce((s,m)=>s+expExcludingOutliers(m.yr===2026?monthly2026Cat[m.mo]:{}),0)/prev3.length:0;
+  const curExpNorm=expExcludingOutliers(cy===2026?monthly2026Cat[cm]:{});
+  const dailyRateNorm=daysGone>0?curExpNorm/daysGone:0, projExpNorm=dailyRateNorm*daysInMo;
+  const paceVsAvg=avg3Exp>0?projExpNorm/avg3Exp:1;
   const paceLbl=paceVsAvg>1.15?'🔴 Over pace':paceVsAvg>1.05?'🟡 Slightly over':'🟢 On track';
 
   const bestSavAmt=Math.max(...[1,2,3,4,5,6].map(m=>(monthly2026Inc[m]||0)-(monthly2026Exp[m]||0)));
@@ -490,18 +511,20 @@ function renderThisMonth() {
     <div class="kpi blue"><div class="label">${moLbl} Income (MTD)</div><div class="value">${fmtK(mtdInc)}</div><div class="sub">${daysGone} of ${daysInMo} days · ${daysLeft} left</div></div>
     <div class="kpi red"><div class="label">${moLbl} Expenses (MTD)</div><div class="value">${fmtK(mtdExp)}</div><div class="sub">${fmtK(dailyRate)}/day · proj. ${fmtK(projExp)} by month-end</div></div>
     <div class="kpi ${mtdSav>=0?'green':'red'}"><div class="label">${moLbl} Saved (MTD)</div><div class="value">${mtdSav>=0?'+':''}${fmtK(mtdSav)}</div><div class="sub"><span class="savings-badge ${savCls(mtdRate)}">${pct(mtdRate)}</span> savings rate</div></div>
-    <div class="kpi ${paceVsAvg>1.15?'red':paceVsAvg>1.05?'orange':'green'}"><div class="label">Pace vs 3-Mo Avg</div><div class="value">${paceLbl}</div><div class="sub">Proj. ${fmtK(projExp)} vs ${fmtK(avg3Exp)} avg · ${pctDone}% of month done</div></div>`;
+    <div class="kpi ${paceVsAvg>1.15?'red':paceVsAvg>1.05?'orange':'green'}"><div class="label">Pace vs 3-Mo Avg</div><div class="value">${paceLbl}</div><div class="sub">Excl. one-offs: proj. ${fmtK(projExpNorm)} vs ${fmtK(avg3Exp)} avg · ${pctDone}% done</div></div>`;
 
-  // One-time detection
-  document.getElementById('onetime-title').textContent=`🔔 One-Time & Non-Recurring Expenses — ${moLbl} ${cy}`;
-  const ot=detectOneTime(cy,cm);
+  // One-time detection — last 12 months
+  document.getElementById('onetime-title').textContent=`🔔 One-Time & Non-Recurring Expenses — Last 12 Months`;
+  const ot=detectOneTime12Mo();
   if (!ot.length) {
     document.getElementById('thismonth-onetime-body').innerHTML='';
-    const n=document.getElementById('onetime-note'); n.textContent='✅ No unusual one-time expenses detected — spending looks routine.'; n.style.display='block';
+    const n=document.getElementById('onetime-note'); n.textContent='✅ No unusual one-time expenses detected in the last 12 months.'; n.style.display='block';
   } else {
     document.getElementById('onetime-note').style.display='none';
     document.getElementById('thismonth-onetime-body').innerHTML=ot.map(e=>`<tr>
-      <td><strong>${e.cat}</strong></td><td class="neutral" style="font-size:12px;">${e.vendor||'—'}</td>
+      <td class="neutral" style="font-size:12px;white-space:nowrap;">${MONTHS_LBL[e.mo-1]} ${e.yr}</td>
+      <td><strong>${e.cat}</strong></td>
+      <td class="neutral" style="font-size:12px;">${e.vendor||'—'}</td>
       <td class="num negative"><strong>${fmt(e.amount)}</strong></td>
       <td style="font-size:12px;">${e.sev==='bad'?'🔴':'🟡'} ${e.reason}</td>
       <td class="num neutral" style="font-size:12px;">${e.baseline!=null?fmt(e.baseline):'—'}</td></tr>`).join('');
