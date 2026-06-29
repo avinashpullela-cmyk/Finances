@@ -496,25 +496,31 @@ function detectOneTime12Mo() {
       s.medTx=med(s.txAmts); s.avgMonth=mv.reduce((a,b)=>a+b,0)/mv.length; s.moCount=mv.length;
     }
     const flagged=[],flaggedCats=new Set();
-    // Pass 1: individual transactions
+    // Pass 1: flag individual transactions that are clearly anomalous
+    // Rules: amount >= $400, AND either brand-new category OR 3× the established median
+    // Requires at least 4 historical transactions to trust the baseline
     for (const tx of curTxs.sort((a,b)=>b.amount-a.amount)) {
-      if (tx.amount<100) continue;
+      if (tx.amount<400) continue;
       const s=stats[tx.cat]; let reason=null,sev='warn',baseline=null;
       const vendor=tx.vendor||topVendor(tx.cat);
-      if (!s) { if(tx.amount>=50){reason='New category — never seen before';} }
-      else if (IRREGULAR.has(tx.cat)) { reason='Non-recurring category'; sev=tx.amount>500?'bad':'warn'; baseline=s.avgMonth>0?s.avgMonth:null; }
-      else if (s.medTx>0&&tx.amount>=s.medTx*2.5&&tx.amount>=300) { reason=`${(tx.amount/s.medTx).toFixed(1)}× typical transaction`; sev=tx.amount>=s.medTx*4?'bad':'warn'; baseline=s.medTx; }
-      else if (s.moCount<=4&&tx.amount>=200) { reason=`Sporadic (${s.moCount} months in history)`; baseline=s.avgMonth; }
+      if (!s || s.txAmts.length===0) {
+        // Truly new category
+        reason='New category — never seen before'; sev='warn';
+      } else if (s.txAmts.length>=4 && s.medTx>=50 && tx.amount>=s.medTx*3) {
+        // 3× the established median with a solid baseline
+        reason=`${(tx.amount/s.medTx).toFixed(1)}× typical ${tx.cat} transaction`;
+        sev=tx.amount>=s.medTx*5?'bad':'warn'; baseline=s.medTx;
+      }
       if (reason) { flagged.push({vendor,cat:tx.cat,amount:tx.amount,reason,sev,baseline}); flaggedCats.add(tx.cat); }
     }
-    // Pass 2: category-level monthly spikes
+    // Pass 2: category monthly total >= 4× historical average (strict — avoids flagging seasonal swings)
     const curCatTotals={};
     for (const tx of curTxs) curCatTotals[tx.cat]=(curCatTotals[tx.cat]||0)+tx.amount;
     for (const [cat,curTotal] of Object.entries(curCatTotals)) {
-      if (flaggedCats.has(cat)||curTotal<300) continue;
-      const s=stats[cat]; if(!s||s.avgMonth<=0) continue;
+      if (flaggedCats.has(cat)||curTotal<600) continue;
+      const s=stats[cat]; if(!s||s.avgMonth<=0||s.moCount<4) continue;
       const sp=curTotal/s.avgMonth;
-      if (sp>=2.5) { flagged.push({vendor:topVendor(cat)||'Multiple',cat,amount:curTotal,reason:`${sp.toFixed(1)}× typical monthly`,sev:sp>=4?'bad':'warn',baseline:s.avgMonth}); flaggedCats.add(cat); }
+      if (sp>=4) { flagged.push({vendor:topVendor(cat)||'Multiple',cat,amount:curTotal,reason:`${sp.toFixed(1)}× typical monthly spend`,sev:'bad',baseline:s.avgMonth}); flaggedCats.add(cat); }
     }
     flagged.sort((a,b)=>b.amount-a.amount).slice(0,6).forEach(f=>allFlagged.push({...f,yr,mo}));
   }
