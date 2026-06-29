@@ -539,7 +539,7 @@ function renderThisMonth() {
   const mtdInc=(cy===2026?monthly2026Inc[cm]:0)||0;
   const mtdCats=(cy===2026?monthly2026Cat[cm]:{})||{};
   const mtdSav=mtdInc-mtdExp, mtdRate=mtdInc>0?(mtdSav/mtdInc)*100:0;
-  const dailyRate=daysGone>0?mtdExp/daysGone:0, projExp=dailyRate*daysInMo;
+  const dailyRate=daysGone>0?mtdExp/daysGone:0;
 
   const prev3=[];
   for (let i=1;i<=3;i++) { let mo=cm-i,yr2=cy; if(mo<=0){mo+=12;yr2--;} const k=`${yr2}-${mo}`; const exp=monthlyExpAll[k]||0,inc=(yr2===2026?monthly2026Inc[mo]:0)||0,cats=(yr2===2026?monthly2026Cat[mo]:{})||{}; prev3.push({mo,yr:yr2,exp,inc,cats,label:MONTHS_LBL[mo-1],key:k}); }
