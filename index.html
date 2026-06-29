@@ -172,7 +172,7 @@
       <canvas id="thisMonthCatBar" style="max-height:320px;"></canvas>
     </div>
     <div class="chart-box">
-      <h3>Monthly Spend Pace</h3>
+      <h3 id="cumulativeTitle">Cumulative Spend by Day</h3>
       <canvas id="thisMonthPace" style="max-height:320px;"></canvas>
     </div>
   </div>
@@ -330,7 +330,7 @@ const YEARS       = [2020,2021,2022,2023,2024,2025,2026];
 const MONTHS_LBL  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const EXP_EXCLUDE = ['Buying Windle','Cashback/Bonuses','Advance Payments'];
 const INC_EXCLUDE = 'Indian Income';
-const IRREGULAR   = new Set(['Vacation','Furniture','Home Improvements','Festivals & Events','Electronics','Learning','Car maintenance','Achi expenses','Baby Expenses']);
+const IRREGULAR   = new Set([]); // rely on quantitative spike detection only
 
 const CAT_ALIAS = { 'Trnasportation':'Transportation','transportation':'Transportation' };
 const SRC_ALIAS = { 'Citi Me':'CITI Me','citi me':'CITI Me','Citac me':'Citac Me' };
@@ -361,6 +361,7 @@ function topVendor(cat) { const v={}; for(const r of expRows){if(r.cat===cat&&r.
 let expRows=[], incRows=[], nannaRows=[];
 let annualExp={}, annualInc={}, catByYear={}, srcByYear={};
 let monthly2026Exp={}, monthly2026Inc={}, monthly2026Cat={};
+let dailyExp={}; // { 'YYYY-M': { day: amount } } raw daily spend
 
 // ── JSONP fetcher ─────────────────────────────────────────────────────────────
 function fetchSheetJSON(sheet) {
@@ -394,6 +395,7 @@ function resetState() {
   expRows=[]; incRows=[]; nannaRows=[];
   annualExp={}; annualInc={}; catByYear={}; srcByYear={};
   monthly2026Exp={}; monthly2026Inc={}; monthly2026Cat={};
+  dailyExp={};
 }
 function renderAll() {
   populateBreakdownYears(); populateTrendCats();
@@ -415,8 +417,12 @@ function processExpenses(rows) {
     const yr     = Number(r['Year'])||0;
     const mo     = Number(r['Month'])||0;
     const vendor = String(r['Store/Vendor']||'');
+    // Parse day from MM-DD-YYYY date column
+    const dateStr = String(r['Date (MM-DD-YYYY)']||r['Date']||'');
+    const dp = dateStr.split('-');
+    const day = dp.length>=2 ? (parseInt(dp[1])||0) : 0;
     if (!cat||!yr||EXP_EXCLUDE.includes(cat)) continue;
-    expRows.push({year:yr,month:mo,cat,amount:amt,vendor});
+    expRows.push({year:yr,month:mo,day,cat,amount:amt,vendor});
     annualExp[yr]=(annualExp[yr]||0)+amt;
     if (!catByYear[cat]) catByYear[cat]={};
     catByYear[cat][yr]=(catByYear[cat][yr]||0)+amt;
@@ -424,6 +430,12 @@ function processExpenses(rows) {
       monthly2026Exp[mo]=(monthly2026Exp[mo]||0)+amt;
       if (!monthly2026Cat[mo]) monthly2026Cat[mo]={};
       monthly2026Cat[mo][cat]=(monthly2026Cat[mo][cat]||0)+amt;
+    }
+    // Daily spend index
+    if (day>0) {
+      const key=`${yr}-${mo}`;
+      if (!dailyExp[key]) dailyExp[key]={};
+      dailyExp[key][day]=(dailyExp[key][day]||0)+amt;
     }
   }
 }
@@ -571,14 +583,37 @@ function renderThisMonth() {
     {label:'3-Mo Avg',data:catData.map(d=>d.avg),backgroundColor:'#a0aec044',borderColor:'#a0aec0',borderWidth:1}
   ]},options:{...dk,responsive:true,interaction:{mode:'index'},plugins:{...dk.plugins,tooltip:{...dk.plugins.tooltip,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`}}},scales:{x:{ticks:{color:'#718096',font:{size:10}},grid:{color:'#1e2433'}},y:{ticks:{color:'#718096',callback:v=>fmtK(v)},grid:{color:'#1e2433'}}}}});
 
-  // Pace chart
-  const pLabels=[...prev3.map(m=>m.label).reverse(),moLbl+' MTD',moLbl+' Proj'];
-  const pExp=[...prev3.map(m=>m.exp).reverse(),mtdExp,projExp];
-  const pInc=[...prev3.map(m=>m.inc).reverse(),mtdInc,null];
-  mkChart('thisMonthPace',{type:'bar',data:{labels:pLabels,datasets:[
-    {label:'Expenses',data:pExp,backgroundColor:pExp.map((_,i)=>i<3?'#fc818166':i===3?'#fc8181bb':'#fc818133'),borderColor:pExp.map((_,i)=>i<3?'#fc8181':i===3?'#fc8181':'#fc818188'),borderWidth:1},
-    {label:'Income',data:pInc,type:'line',borderColor:'#63b3ed',backgroundColor:'transparent',pointBackgroundColor:'#63b3ed',tension:0.3,spanGaps:true}
-  ]},options:{...dk,responsive:true,interaction:{mode:'index'},plugins:{...dk.plugins,tooltip:{...dk.plugins.tooltip,callbacks:{label:ctx=>ctx.parsed.y!=null?` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`:null}}}}});
+  // Cumulative spend by day chart
+  function getCumByDay(yr, mo, capDay) {
+    const key=`${yr}-${mo}`, daily=dailyExp[key]||{};
+    const totalDays=new Date(yr,mo,0).getDate();
+    const res=[]; let cum=0;
+    for(let d=1;d<=31;d++){
+      if(d<=totalDays){ cum+=(daily[d]||0); res.push(capDay&&d>capDay?null:Math.round(cum)); }
+      else res.push(null);
+    }
+    return res;
+  }
+  const dayLabels=Array.from({length:31},(_,i)=>i+1);
+  const hasDailyData=Object.keys(dailyExp).length>0;
+  document.getElementById('cumulativeTitle').textContent=`Cumulative Spend by Day — ${moLbl} ${cy} vs Prior Months & Years`;
+  if(hasDailyData){
+    const curSeries=getCumByDay(cy,cm,daysGone);
+    const prev2Series=prev3.slice(0,2).map(m=>getCumByDay(m.yr,m.mo,null));
+    const histSeries=[1,2,3].map(i=>getCumByDay(cy-i,cm,null));
+    const todayLine=dayLabels.map(d=>d===daysGone?(curSeries[daysGone-1]||null):null);
+    const datasets=[
+      {label:`${moLbl} ${cy} (MTD)`,data:curSeries,borderColor:'#63b3ed',borderWidth:2.5,pointRadius:0,tension:0.2,fill:false,spanGaps:false},
+      ...prev3.slice(0,2).map((m,i)=>({label:`${m.label} ${m.yr}`,data:prev2Series[i],borderColor:['#68d391','#f6ad55'][i],borderWidth:1.5,borderDash:[5,3],pointRadius:0,tension:0.2,fill:false,spanGaps:false})),
+      ...histSeries.map((s,i)=>({label:`${moLbl} ${cy-i-1}`,data:s,borderColor:['#b794f4','#76e4f7','#f6e05e'][i],borderWidth:1,borderDash:[2,4],pointRadius:0,tension:0.2,fill:false,spanGaps:false,opacity:0.6}))
+    ];
+    mkChart('thisMonthPace',{type:'line',data:{labels:dayLabels,datasets},options:{responsive:true,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:'#a0aec0',boxWidth:10,font:{size:10}}},tooltip:{backgroundColor:'#1a1d2e',borderColor:'#2d3748',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#a0aec0',callbacks:{title:ctx=>`Day ${ctx[0].label}`,label:ctx=>ctx.parsed.y!=null?` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`:null}}},scales:{x:{ticks:{color:'#718096',font:{size:10},callback:(v,i)=>(i+1)%5===0||i===0?i+1:''},grid:{color:'#1e2433'},title:{display:true,text:'Day of month',color:'#4a5568',font:{size:10}}},y:{ticks:{color:'#718096',callback:v=>fmtK(v)},grid:{color:'#1e2433'}}}}});
+  } else {
+    // Fallback: bar chart of monthly totals if no day-level data
+    const pLabels=[...prev3.map(m=>m.label).reverse(),moLbl+' MTD'];
+    const pExp=[...prev3.map(m=>m.exp).reverse(),mtdExp];
+    mkChart('thisMonthPace',{type:'bar',data:{labels:pLabels,datasets:[{label:'Expenses',data:pExp,backgroundColor:pExp.map((_,i)=>i<3?'#fc818166':'#fc8181bb'),borderColor:'#fc8181',borderWidth:1}]},options:{...dk,responsive:true}});
+  }
 
   // Outlier table
   const outliers=catData.filter(d=>d.cur>100&&(d.avg===0||d.cur>d.avg*1.3)).sort((a,b)=>(b.cur-b.avg)-(a.cur-a.avg));
