@@ -149,7 +149,7 @@
   <button class="tab active" onclick="showView('thismonth',this)">📅 This Month</button>
   <button class="tab" onclick="showView('overview',this)">Annual Overview</button>
   <button class="tab" onclick="showView('breakdown',this)">Expense Breakdown</button>
-  <button class="tab" onclick="showView('monthly',this)">2026 Monthly</button>
+  <button class="tab" onclick="showView('monthly',this)">📆 Monthly View</button>
   <button class="tab" onclick="showView('income',this)">Income Sources</button>
   <button class="tab nanna" onclick="showView('nanna',this)">👴 Nanna Account</button>
   <button class="tab" onclick="showView('trends',this)">Category Trends</button>
@@ -246,21 +246,35 @@
   </div>
 </div>
 
-<!-- VIEW: 2026 MONTHLY -->
+<!-- VIEW: MONTHLY VIEW -->
 <div id="view-monthly" class="view">
+  <!-- Date range picker -->
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
+    <span style="font-size:13px;color:#a0aec0;font-weight:600;">FROM</span>
+    <select id="monthly-from-mo" style="background:#1a1d2e;color:#e2e8f0;border:1px solid #2d3748;border-radius:6px;padding:7px 10px;font-size:13px;cursor:pointer;"></select>
+    <select id="monthly-from-yr" style="background:#1a1d2e;color:#e2e8f0;border:1px solid #2d3748;border-radius:6px;padding:7px 10px;font-size:13px;cursor:pointer;"></select>
+    <span style="font-size:13px;color:#a0aec0;font-weight:600;margin-left:8px;">TO</span>
+    <select id="monthly-to-mo" style="background:#1a1d2e;color:#e2e8f0;border:1px solid #2d3748;border-radius:6px;padding:7px 10px;font-size:13px;cursor:pointer;"></select>
+    <select id="monthly-to-yr" style="background:#1a1d2e;color:#e2e8f0;border:1px solid #2d3748;border-radius:6px;padding:7px 10px;font-size:13px;cursor:pointer;"></select>
+    <button onclick="renderMonthly()" style="background:#3182ce;color:#fff;border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;margin-left:4px;">Apply</button>
+    <button onclick="setMonthlyPreset('ytd')" style="background:#2d3748;color:#a0aec0;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">YTD</button>
+    <button onclick="setMonthlyPreset('12m')" style="background:#2d3748;color:#a0aec0;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">Last 12 Mo</button>
+    <button onclick="setMonthlyPreset('all')" style="background:#2d3748;color:#a0aec0;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">All Time</button>
+    <span id="monthly-range-label" style="font-size:12px;color:#4a5568;margin-left:8px;"></span>
+  </div>
   <div class="kpi-row" id="kpi-monthly"></div>
   <div class="chart-grid" style="grid-template-columns:2fr 1fr;margin-bottom:20px;">
     <div class="chart-box">
-      <h3>2026 Monthly Income vs Expenses</h3>
+      <h3 id="monthly-bar-title">Monthly Income vs Expenses</h3>
       <canvas id="monthlyBar"></canvas>
     </div>
     <div class="chart-box">
-      <h3>2026 Monthly Savings Rate</h3>
+      <h3>Monthly Savings Rate</h3>
       <canvas id="monthlySavings"></canvas>
     </div>
   </div>
   <div class="table-box">
-    <h3>2026 Month-by-Month Detail</h3>
+    <h3 id="monthly-table-title">Month-by-Month Detail</h3>
     <table>
       <thead><tr><th>Month</th><th class="num">Income</th><th class="num">Expenses</th><th class="num">Saved</th><th class="num">Rate</th><th>Top Category</th></tr></thead>
       <tbody id="monthly-table-body"></tbody>
@@ -399,7 +413,7 @@ function resetState() {
   dailyExp={}; monthlyExpAll={};
 }
 function renderAll() {
-  populateBreakdownYears(); populateTrendCats();
+  populateBreakdownYears(); populateTrendCats(); initMonthlyPickers();
   renderThisMonth(); renderOverview(); renderBreakdown();
   renderMonthly(); renderIncome(); renderNanna(); renderTrends();
 }
@@ -683,28 +697,98 @@ function renderBreakdown() {
   document.getElementById('breakdown-table-body').innerHTML=cats.map(c=>{const sp=total>0?c.amount/total*100:0;return`<tr><td>${c.cat}</td><td class="num">${fmt(c.amount)}</td><td class="num">${pct(sp)}</td><td><div class="bar-inline"><div class="mini-bar" style="width:${Math.round(sp*1.5)}px;background:#63b3ed66;"></div></div></td></tr>`;}).join('')||'<tr><td colspan="4" class="neutral">No data</td></tr>';
 }
 
-// ── VIEW: 2026 Monthly ────────────────────────────────────────────────────────
+// ── VIEW: Monthly View (date-range) ──────────────────────────────────────────
+function initMonthlyPickers() {
+  const now=new Date();
+  const fromMoEl=document.getElementById('monthly-from-mo'), fromYrEl=document.getElementById('monthly-from-yr');
+  const toMoEl=document.getElementById('monthly-to-mo'),   toYrEl=document.getElementById('monthly-to-yr');
+  const moOpts=MONTHS_LBL.map((l,i)=>`<option value="${i+1}">${l}</option>`).join('');
+  [fromMoEl,toMoEl].forEach(el=>el.innerHTML=moOpts);
+  const yrOpts=YEARS.map(y=>`<option value="${y}">${y}</option>`).join('');
+  [fromYrEl,toYrEl].forEach(el=>el.innerHTML=yrOpts);
+  // Default: Jan current year → current month/year
+  fromMoEl.value='1'; fromYrEl.value=now.getFullYear();
+  toMoEl.value=now.getMonth()+1; toYrEl.value=now.getFullYear();
+}
+
+function setMonthlyPreset(preset) {
+  const now=new Date(), cy=now.getFullYear(), cm=now.getMonth()+1;
+  const fromMoEl=document.getElementById('monthly-from-mo'), fromYrEl=document.getElementById('monthly-from-yr');
+  const toMoEl=document.getElementById('monthly-to-mo'),   toYrEl=document.getElementById('monthly-to-yr');
+  if (preset==='ytd') { fromMoEl.value=1; fromYrEl.value=cy; toMoEl.value=cm; toYrEl.value=cy; }
+  else if (preset==='12m') { let fm=cm-11,fy=cy; if(fm<=0){fm+=12;fy--;} fromMoEl.value=fm; fromYrEl.value=fy; toMoEl.value=cm; toYrEl.value=cy; }
+  else if (preset==='all') { fromMoEl.value=1; fromYrEl.value=YEARS[0]; toMoEl.value=12; toYrEl.value=cy; }
+  renderMonthly();
+}
+
 function renderMonthly() {
-  const months=[1,2,3,4,5,6,7,8,9,10,11,12];
-  const incM=months.map(m=>monthly2026Inc[m]||0), expM=months.map(m=>monthly2026Exp[m]||0);
-  const savM=months.map((m,i)=>incM[i]-expM[i]), rateM=months.map((m,i)=>incM[i]>0?(savM[i]/incM[i])*100:0);
-  const lastMo=months.filter(m=>(monthly2026Inc[m]||0)+(monthly2026Exp[m]||0)>0).slice(-1)[0]||6;
-  const activeM=months.filter(m=>m<=lastMo);
-  const totI=activeM.reduce((s,m)=>s+(monthly2026Inc[m]||0),0), totE=activeM.reduce((s,m)=>s+(monthly2026Exp[m]||0),0);
+  const fromMo=parseInt(document.getElementById('monthly-from-mo').value)||1;
+  const fromYr=parseInt(document.getElementById('monthly-from-yr').value)||2026;
+  const toMo=parseInt(document.getElementById('monthly-to-mo').value)||12;
+  const toYr=parseInt(document.getElementById('monthly-to-yr').value)||2026;
+
+  // Build ordered list of (yr, mo) pairs in range
+  const periods=[];
+  let yr=fromYr, mo=fromMo;
+  while (yr<toYr||(yr===toYr&&mo<=toMo)) {
+    periods.push({yr,mo});
+    mo++; if(mo>12){mo=1;yr++;}
+    if(periods.length>120) break; // safety cap: 10 years
+  }
+
+  // Aggregate income per (yr, mo) from incRows
+  const incByKey={};
+  for (const r of incRows) { const k=`${r.year}-${r.month}`; incByKey[k]=(incByKey[k]||0)+r.amount; }
+
+  // Aggregate expense categories per (yr, mo) from expRows
+  const catByKey={};
+  for (const r of expRows) { const k=`${r.year}-${r.month}`; if(!catByKey[k])catByKey[k]={}; catByKey[k][r.cat]=(catByKey[k][r.cat]||0)+r.amount; }
+
+  // Build per-period data
+  const rows=periods.map(({yr,mo})=>{
+    const k=`${yr}-${mo}`;
+    const inc=incByKey[k]||0, exp=monthlyExpAll[k]||0, sav=inc-exp, rate=inc>0?(sav/inc)*100:0;
+    const topCat=Object.entries(catByKey[k]||{}).sort((a,b)=>b[1]-a[1])[0]||null;
+    return {yr,mo,inc,exp,sav,rate,topCat,label:`${MONTHS_LBL[mo-1]} ${yr}`};
+  }).filter(r=>r.inc>0||r.exp>0);
+
+  if (!rows.length) {
+    document.getElementById('kpi-monthly').innerHTML='<div class="kpi" style="grid-column:1/-1"><div class="label">No data in this range</div></div>';
+    return;
+  }
+
+  const totI=rows.reduce((s,r)=>s+r.inc,0), totE=rows.reduce((s,r)=>s+r.exp,0);
   const totS=totI-totE, totR=totI>0?(totS/totI)*100:0;
-  const bestSA=Math.max(...activeM.map(m=>savM[m-1])), bestSI=savM.findIndex(v=>v===bestSA);
+  const bestRow=rows.reduce((a,b)=>b.sav>a.sav?b:a, rows[0]);
+  const rangeLabel=rows.length===1?rows[0].label:`${rows[0].label} – ${rows[rows.length-1].label}`;
+  document.getElementById('monthly-range-label').textContent=`(${rows.length} months)`;
+  document.getElementById('monthly-bar-title').textContent=`Monthly Income vs Expenses — ${rangeLabel}`;
+  document.getElementById('monthly-table-title').textContent=`Month-by-Month Detail — ${rangeLabel}`;
+
   document.getElementById('kpi-monthly').innerHTML=`
-    <div class="kpi blue"><div class="label">2026 YTD Income</div><div class="value">${fmtK(totI)}</div><div class="sub">Jan–${MONTHS_LBL[lastMo-1]}</div></div>
-    <div class="kpi red"><div class="label">2026 YTD Expenses</div><div class="value">${fmtK(totE)}</div><div class="sub">${fmtK(totE/activeM.length)} avg/month</div></div>
-    <div class="kpi green"><div class="label">2026 YTD Savings</div><div class="value">${fmtK(totS)}</div><div class="sub">${pct(totR)} savings rate</div></div>
-    <div class="kpi yellow"><div class="label">Best Month</div><div class="value">${MONTHS_LBL[bestSI]||'—'}</div><div class="sub">${fmtK(bestSA)} saved</div></div>`;
-  const labels=activeM.map(m=>MONTHS_LBL[m-1]), iD=activeM.map(m=>monthly2026Inc[m]||0), eD=activeM.map(m=>monthly2026Exp[m]||0), sD=activeM.map(m=>savM[m-1]);
-  mkChart('monthlyBar',{type:'bar',data:{labels,datasets:[{label:'Income',data:iD,backgroundColor:'#63b3ed88',borderColor:'#63b3ed',borderWidth:1},{label:'Expenses',data:eD,backgroundColor:'#fc818188',borderColor:'#fc8181',borderWidth:1},{label:'Savings',data:sD,backgroundColor:sD.map(v=>v>=0?'#68d39188':'#fc818188'),borderColor:sD.map(v=>v>=0?'#68d391':'#fc8181'),borderWidth:1}]},options:{...dk,responsive:true,interaction:{mode:'index'},plugins:{...dk.plugins,tooltip:{...dk.plugins.tooltip,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`}}}}});
-  mkChart('monthlySavings',{type:'bar',data:{labels,datasets:[{label:'Savings Rate',data:activeM.map(m=>rateM[m-1]),backgroundColor:activeM.map(m=>rateM[m-1]>=25?'#68d391aa':rateM[m-1]>=0?'#f6ad55aa':'#fc8181aa'),borderRadius:4}]},options:{...dk,responsive:true,plugins:{...dk.plugins,tooltip:{...dk.plugins.tooltip,callbacks:{label:ctx=>` ${ctx.parsed.y.toFixed(1)}%`}}},scales:{...dk.scales,y:{...dk.scales.y,ticks:{color:'#718096',callback:v=>v+'%'}}}}});
-  document.getElementById('monthly-table-body').innerHTML=activeM.map(m=>{
-    const mI=monthly2026Inc[m]||0,mE=monthly2026Exp[m]||0,mS=mI-mE,mR=mI>0?(mS/mI)*100:0;
-    const top=Object.entries(monthly2026Cat[m]||{}).sort((a,b)=>b[1]-a[1])[0];
-    return`<tr><td><strong>${MONTHS_LBL[m-1]}</strong></td><td class="num">${fmt(mI)}</td><td class="num">${fmt(mE)}</td><td class="num">${mS>=0?`<span class="positive">+${fmt(mS)}</span>`:`<span class="negative">${fmt(mS)}</span>`}</td><td class="num"><span class="savings-badge ${savCls(mR)}">${pct(mR)}</span></td><td class="neutral" style="font-size:12px;">${top?`${top[0]} (${fmt(top[1])})`:''}</td></tr>`;
+    <div class="kpi blue"><div class="label">Total Income</div><div class="value">${fmtK(totI)}</div><div class="sub">${rangeLabel}</div></div>
+    <div class="kpi red"><div class="label">Total Expenses</div><div class="value">${fmtK(totE)}</div><div class="sub">${fmtK(totE/rows.length)}/month avg</div></div>
+    <div class="kpi ${totS>=0?'green':'red'}"><div class="label">Total Saved</div><div class="value">${totS>=0?'+':''}${fmtK(totS)}</div><div class="sub">${pct(totR)} savings rate</div></div>
+    <div class="kpi yellow"><div class="label">Best Month</div><div class="value">${bestRow.label}</div><div class="sub">${fmtK(bestRow.sav)} saved</div></div>`;
+
+  const labels=rows.map(r=>rows.length>18?`${MONTHS_LBL[r.mo-1].slice(0,1)} ${String(r.yr).slice(2)}`:r.label);
+  mkChart('monthlyBar',{type:'bar',data:{labels,datasets:[
+    {label:'Income',data:rows.map(r=>r.inc),backgroundColor:'#63b3ed88',borderColor:'#63b3ed',borderWidth:1},
+    {label:'Expenses',data:rows.map(r=>r.exp),backgroundColor:'#fc818188',borderColor:'#fc8181',borderWidth:1},
+    {label:'Savings',data:rows.map(r=>r.sav),backgroundColor:rows.map(r=>r.sav>=0?'#68d39188':'#fc818188'),borderColor:rows.map(r=>r.sav>=0?'#68d391':'#fc8181'),borderWidth:1}
+  ]},options:{...dk,responsive:true,interaction:{mode:'index'},plugins:{...dk.plugins,tooltip:{...dk.plugins.tooltip,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`}}}}});
+
+  mkChart('monthlySavings',{type:'bar',data:{labels,datasets:[{label:'Savings Rate',data:rows.map(r=>r.rate),backgroundColor:rows.map(r=>r.rate>=25?'#68d391aa':r.rate>=0?'#f6ad55aa':'#fc8181aa'),borderRadius:4}]},options:{...dk,responsive:true,plugins:{...dk.plugins,tooltip:{...dk.plugins.tooltip,callbacks:{label:ctx=>` ${ctx.parsed.y.toFixed(1)}%`}}},scales:{...dk.scales,y:{...dk.scales.y,ticks:{color:'#718096',callback:v=>v+'%'}}}}});
+
+  document.getElementById('monthly-table-body').innerHTML=rows.map(r=>{
+    return`<tr>
+      <td><strong>${r.label}</strong></td>
+      <td class="num">${fmt(r.inc)}</td>
+      <td class="num">${fmt(r.exp)}</td>
+      <td class="num">${r.sav>=0?`<span class="positive">+${fmt(r.sav)}</span>`:`<span class="negative">${fmt(r.sav)}</span>`}</td>
+      <td class="num"><span class="savings-badge ${savCls(r.rate)}">${pct(r.rate)}</span></td>
+      <td class="neutral" style="font-size:12px;">${r.topCat?`${r.topCat[0]} (${fmt(r.topCat[1])})`:''}</td>
+    </tr>`;
   }).join('');
 }
 
