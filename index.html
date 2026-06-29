@@ -218,10 +218,19 @@
 
 <!-- VIEW: EXPENSE BREAKDOWN -->
 <div id="view-breakdown" class="view">
-  <div class="controls">
-    <div class="ctrl-group"><label>Year:</label><select id="breakdown-year" onchange="renderBreakdown()"></select></div>
-    <div class="ctrl-group"><label>Sort:</label>
-      <select id="breakdown-sort" onchange="renderBreakdown()">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
+    <span style="font-size:13px;color:#a0aec0;font-weight:600;">FROM</span>
+    <select id="breakdown-from-mo" style="background:#1a1d2e;color:#e2e8f0;border:1px solid #2d3748;border-radius:6px;padding:7px 10px;font-size:13px;cursor:pointer;"></select>
+    <select id="breakdown-from-yr" style="background:#1a1d2e;color:#e2e8f0;border:1px solid #2d3748;border-radius:6px;padding:7px 10px;font-size:13px;cursor:pointer;"></select>
+    <span style="font-size:13px;color:#a0aec0;font-weight:600;margin-left:8px;">TO</span>
+    <select id="breakdown-to-mo" style="background:#1a1d2e;color:#e2e8f0;border:1px solid #2d3748;border-radius:6px;padding:7px 10px;font-size:13px;cursor:pointer;"></select>
+    <select id="breakdown-to-yr" style="background:#1a1d2e;color:#e2e8f0;border:1px solid #2d3748;border-radius:6px;padding:7px 10px;font-size:13px;cursor:pointer;"></select>
+    <button onclick="renderBreakdown()" style="background:#3182ce;color:#fff;border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;margin-left:4px;">Apply</button>
+    <button onclick="setRangePreset('breakdown','ytd')" style="background:#2d3748;color:#a0aec0;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">YTD</button>
+    <button onclick="setRangePreset('breakdown','12m')" style="background:#2d3748;color:#a0aec0;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">Last 12 Mo</button>
+    <button onclick="setRangePreset('breakdown','all')" style="background:#2d3748;color:#a0aec0;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">All Time</button>
+    <div class="ctrl-group" style="margin-left:12px;"><label>Sort:</label>
+      <select id="breakdown-sort" onchange="renderBreakdown()" style="background:#1a1d2e;color:#e2e8f0;border:1px solid #2d3748;border-radius:6px;padding:7px 10px;font-size:13px;">
         <option value="amount">Amount (high→low)</option>
         <option value="name">Category name</option>
       </select>
@@ -284,19 +293,31 @@
 
 <!-- VIEW: INCOME SOURCES -->
 <div id="view-income" class="view">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
+    <span style="font-size:13px;color:#a0aec0;font-weight:600;">FROM</span>
+    <select id="income-from-mo" style="background:#1a1d2e;color:#e2e8f0;border:1px solid #2d3748;border-radius:6px;padding:7px 10px;font-size:13px;cursor:pointer;"></select>
+    <select id="income-from-yr" style="background:#1a1d2e;color:#e2e8f0;border:1px solid #2d3748;border-radius:6px;padding:7px 10px;font-size:13px;cursor:pointer;"></select>
+    <span style="font-size:13px;color:#a0aec0;font-weight:600;margin-left:8px;">TO</span>
+    <select id="income-to-mo" style="background:#1a1d2e;color:#e2e8f0;border:1px solid #2d3748;border-radius:6px;padding:7px 10px;font-size:13px;cursor:pointer;"></select>
+    <select id="income-to-yr" style="background:#1a1d2e;color:#e2e8f0;border:1px solid #2d3748;border-radius:6px;padding:7px 10px;font-size:13px;cursor:pointer;"></select>
+    <button onclick="renderIncome()" style="background:#3182ce;color:#fff;border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;margin-left:4px;">Apply</button>
+    <button onclick="setRangePreset('income','ytd')" style="background:#2d3748;color:#a0aec0;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">YTD</button>
+    <button onclick="setRangePreset('income','12m')" style="background:#2d3748;color:#a0aec0;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">Last 12 Mo</button>
+    <button onclick="setRangePreset('income','all')" style="background:#2d3748;color:#a0aec0;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">All Time</button>
+  </div>
   <div class="kpi-row kpi-row-3" id="kpi-income"></div>
   <div class="chart-grid" style="grid-template-columns:2fr 1fr;margin-bottom:20px;">
     <div class="chart-box">
-      <h3>Income by Source — Annual (excl. Indian Income)</h3>
+      <h3 id="income-bar-title">Income by Source</h3>
       <canvas id="incomeBar"></canvas>
     </div>
     <div class="chart-box">
-      <h3>2026 YTD Income Mix</h3>
+      <h3 id="income-pie-title">Income Mix</h3>
       <canvas id="incomePie"></canvas>
     </div>
   </div>
   <div class="table-box">
-    <h3>Income Source Breakdown by Year</h3>
+    <h3 id="income-table-title">Income Source Breakdown</h3>
     <table><thead id="income-table-head"></thead><tbody id="income-table-body"></tbody></table>
   </div>
 </div>
@@ -413,7 +434,12 @@ function resetState() {
   dailyExp={}; monthlyExpAll={};
 }
 function renderAll() {
-  populateBreakdownYears(); populateTrendCats(); initMonthlyPickers();
+  const now=new Date(), cy=now.getFullYear(), cm=now.getMonth()+1;
+  populateTrendCats();
+  // Init all date pickers with YTD default
+  initMonthlyPickers();
+  initDatePickers('breakdown', 1, cy, cm, cy);
+  initDatePickers('income', 1, cy, cm, cy);
   renderThisMonth(); renderOverview(); renderBreakdown();
   renderMonthly(); renderIncome(); renderNanna(); renderTrends();
 }
@@ -679,19 +705,65 @@ function renderOverview() {
 }
 
 // ── VIEW: Expense Breakdown ───────────────────────────────────────────────────
+// ── Shared date-range helpers ─────────────────────────────────────────────────
+function initDatePickers(prefix, defaultFromMo, defaultFromYr, defaultToMo, defaultToYr) {
+  const moOpts=MONTHS_LBL.map((l,i)=>`<option value="${i+1}">${l}</option>`).join('');
+  const yrOpts=YEARS.map(y=>`<option value="${y}">${y}</option>`).join('');
+  ['from-mo','to-mo'].forEach(id=>{ const el=document.getElementById(`${prefix}-${id}`); if(el){el.innerHTML=moOpts;} });
+  ['from-yr','to-yr'].forEach(id=>{ const el=document.getElementById(`${prefix}-${id}`); if(el){el.innerHTML=yrOpts;} });
+  document.getElementById(`${prefix}-from-mo`).value=defaultFromMo;
+  document.getElementById(`${prefix}-from-yr`).value=defaultFromYr;
+  document.getElementById(`${prefix}-to-mo`).value=defaultToMo;
+  document.getElementById(`${prefix}-to-yr`).value=defaultToYr;
+}
+
+function getRange(prefix) {
+  const fromMo=parseInt(document.getElementById(`${prefix}-from-mo`).value)||1;
+  const fromYr=parseInt(document.getElementById(`${prefix}-from-yr`).value)||2020;
+  const toMo=parseInt(document.getElementById(`${prefix}-to-mo`).value)||12;
+  const toYr=parseInt(document.getElementById(`${prefix}-to-yr`).value)||2026;
+  const periods=[]; let yr=fromYr, mo=fromMo;
+  while (yr<toYr||(yr===toYr&&mo<=toMo)) {
+    periods.push({yr,mo}); mo++; if(mo>12){mo=1;yr++;}
+    if(periods.length>120) break;
+  }
+  const rangeLabel=periods.length===0?'—':periods.length===1
+    ?`${MONTHS_LBL[fromMo-1]} ${fromYr}`
+    :`${MONTHS_LBL[fromMo-1]} ${fromYr} – ${MONTHS_LBL[toMo-1]} ${toYr}`;
+  return {fromMo,fromYr,toMo,toYr,periods,rangeLabel};
+}
+
+function setRangePreset(prefix, preset) {
+  const now=new Date(), cy=now.getFullYear(), cm=now.getMonth()+1;
+  if (preset==='ytd') { document.getElementById(`${prefix}-from-mo`).value=1; document.getElementById(`${prefix}-from-yr`).value=cy; document.getElementById(`${prefix}-to-mo`).value=cm; document.getElementById(`${prefix}-to-yr`).value=cy; }
+  else if (preset==='12m') { let fm=cm-11,fy=cy; if(fm<=0){fm+=12;fy--;} document.getElementById(`${prefix}-from-mo`).value=fm; document.getElementById(`${prefix}-from-yr`).value=fy; document.getElementById(`${prefix}-to-mo`).value=cm; document.getElementById(`${prefix}-to-yr`).value=cy; }
+  else if (preset==='all') { document.getElementById(`${prefix}-from-mo`).value=1; document.getElementById(`${prefix}-from-yr`).value=YEARS[0]; document.getElementById(`${prefix}-to-mo`).value=12; document.getElementById(`${prefix}-to-yr`).value=cy; }
+  if (prefix==='breakdown') renderBreakdown();
+  else if (prefix==='income') renderIncome();
+  else if (prefix==='monthly') renderMonthly();
+}
+
+// ── VIEW: Expense Breakdown ───────────────────────────────────────────────────
 function populateBreakdownYears() {
-  document.getElementById('breakdown-year').innerHTML=YEARS.slice().reverse().map(y=>`<option value="${y}">${y===2026?'2026 YTD':y}</option>`).join('');
+  // Now handled by initDatePickers — kept for compatibility with renderAll call
 }
 function renderBreakdown() {
-  const yr=parseInt(document.getElementById('breakdown-year').value);
+  const {periods, rangeLabel}=getRange('breakdown');
   const sort=document.getElementById('breakdown-sort').value;
-  let cats=Object.entries(catByYear).map(([cat,d])=>({cat,amount:d[yr]||0})).filter(d=>d.amount>0);
+  // Aggregate categories across all periods in range from expRows
+  const catTotals={};
+  for (const r of expRows) {
+    if (periods.some(p=>p.yr===r.year&&p.mo===r.month)) {
+      catTotals[r.cat]=(catTotals[r.cat]||0)+r.amount;
+    }
+  }
+  let cats=Object.entries(catTotals).map(([cat,amount])=>({cat,amount})).filter(d=>d.amount>0);
   cats.sort((a,b)=>sort==='amount'?b.amount-a.amount:a.cat.localeCompare(b.cat));
-  const total=cats.reduce((s,c)=>s+c.amount,0), lbl=yr===2026?'2026 YTD':yr;
+  const total=cats.reduce((s,c)=>s+c.amount,0);
   const colors=cats.map((_,i)=>PALETTE[i%PALETTE.length]);
-  document.getElementById('breakdown-bar-title').textContent=`Expense Categories — ${lbl}`;
-  document.getElementById('breakdown-pie-title').textContent=`Category Share — ${lbl}`;
-  document.getElementById('breakdown-table-title').textContent=`Category Detail — ${lbl}`;
+  document.getElementById('breakdown-bar-title').textContent=`Expense Categories — ${rangeLabel}`;
+  document.getElementById('breakdown-pie-title').textContent=`Category Share — ${rangeLabel}`;
+  document.getElementById('breakdown-table-title').textContent=`Category Detail — ${rangeLabel}`;
   mkChart('breakdownBar',{type:'bar',data:{labels:cats.map(c=>c.cat),datasets:[{label:'Expenses',data:cats.map(c=>c.amount),backgroundColor:colors.map(c=>c+'99'),borderColor:colors,borderWidth:1}]},options:{...dk,indexAxis:'y',responsive:true,plugins:{...dk.plugins,legend:{display:false}},scales:{x:{ticks:{color:'#718096',callback:v=>fmtK(v)},grid:{color:'#1e2433'}},y:{ticks:{color:'#718096',font:{size:11}},grid:{color:'#1e2433'}}}}});
   mkChart('breakdownPie',{type:'doughnut',data:{labels:cats.map(c=>c.cat),datasets:[{data:cats.map(c=>c.amount),backgroundColor:colors.map(c=>c+'cc'),borderColor:'#0f1117',borderWidth:2}]},options:{responsive:true,plugins:{legend:{labels:{color:'#a0aec0',boxWidth:10,font:{size:10}}},tooltip:{backgroundColor:'#1a1d2e',borderColor:'#2d3748',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#a0aec0',callbacks:{label:ctx=>`  ${ctx.label}: ${fmt(ctx.parsed)} (${pct(ctx.parsed/total*100)})`}}}}});
   document.getElementById('breakdown-table-body').innerHTML=cats.map(c=>{const sp=total>0?c.amount/total*100:0;return`<tr><td>${c.cat}</td><td class="num">${fmt(c.amount)}</td><td class="num">${pct(sp)}</td><td><div class="bar-inline"><div class="mini-bar" style="width:${Math.round(sp*1.5)}px;background:#63b3ed66;"></div></div></td></tr>`;}).join('')||'<tr><td colspan="4" class="neutral">No data</td></tr>';
@@ -700,55 +772,30 @@ function renderBreakdown() {
 // ── VIEW: Monthly View (date-range) ──────────────────────────────────────────
 function initMonthlyPickers() {
   const now=new Date();
-  const fromMoEl=document.getElementById('monthly-from-mo'), fromYrEl=document.getElementById('monthly-from-yr');
-  const toMoEl=document.getElementById('monthly-to-mo'),   toYrEl=document.getElementById('monthly-to-yr');
-  const moOpts=MONTHS_LBL.map((l,i)=>`<option value="${i+1}">${l}</option>`).join('');
-  [fromMoEl,toMoEl].forEach(el=>el.innerHTML=moOpts);
-  const yrOpts=YEARS.map(y=>`<option value="${y}">${y}</option>`).join('');
-  [fromYrEl,toYrEl].forEach(el=>el.innerHTML=yrOpts);
-  // Default: Jan current year → current month/year
-  fromMoEl.value='1'; fromYrEl.value=now.getFullYear();
-  toMoEl.value=now.getMonth()+1; toYrEl.value=now.getFullYear();
+  initDatePickers('monthly', 1, now.getFullYear(), now.getMonth()+1, now.getFullYear());
 }
 
 function setMonthlyPreset(preset) {
-  const now=new Date(), cy=now.getFullYear(), cm=now.getMonth()+1;
-  const fromMoEl=document.getElementById('monthly-from-mo'), fromYrEl=document.getElementById('monthly-from-yr');
-  const toMoEl=document.getElementById('monthly-to-mo'),   toYrEl=document.getElementById('monthly-to-yr');
-  if (preset==='ytd') { fromMoEl.value=1; fromYrEl.value=cy; toMoEl.value=cm; toYrEl.value=cy; }
-  else if (preset==='12m') { let fm=cm-11,fy=cy; if(fm<=0){fm+=12;fy--;} fromMoEl.value=fm; fromYrEl.value=fy; toMoEl.value=cm; toYrEl.value=cy; }
-  else if (preset==='all') { fromMoEl.value=1; fromYrEl.value=YEARS[0]; toMoEl.value=12; toYrEl.value=cy; }
+  setRangePreset('monthly', preset);
   renderMonthly();
 }
 
 function renderMonthly() {
-  const fromMo=parseInt(document.getElementById('monthly-from-mo').value)||1;
-  const fromYr=parseInt(document.getElementById('monthly-from-yr').value)||2026;
-  const toMo=parseInt(document.getElementById('monthly-to-mo').value)||12;
-  const toYr=parseInt(document.getElementById('monthly-to-yr').value)||2026;
-
-  // Build ordered list of (yr, mo) pairs in range
-  const periods=[];
-  let yr=fromYr, mo=fromMo;
-  while (yr<toYr||(yr===toYr&&mo<=toMo)) {
-    periods.push({yr,mo});
-    mo++; if(mo>12){mo=1;yr++;}
-    if(periods.length>120) break; // safety cap: 10 years
-  }
+  const {periods, rangeLabel}=getRange('monthly');
 
   // Aggregate income per (yr, mo) from incRows
   const incByKey={};
   for (const r of incRows) { const k=`${r.year}-${r.month}`; incByKey[k]=(incByKey[k]||0)+r.amount; }
 
   // Aggregate expense categories per (yr, mo) from expRows
-  const catByKey={};
-  for (const r of expRows) { const k=`${r.year}-${r.month}`; if(!catByKey[k])catByKey[k]={}; catByKey[k][r.cat]=(catByKey[k][r.cat]||0)+r.amount; }
+  const catByMoKey={};
+  for (const r of expRows) { const k=`${r.year}-${r.month}`; if(!catByMoKey[k])catByMoKey[k]={}; catByMoKey[k][r.cat]=(catByMoKey[k][r.cat]||0)+r.amount; }
 
   // Build per-period data
   const rows=periods.map(({yr,mo})=>{
     const k=`${yr}-${mo}`;
     const inc=incByKey[k]||0, exp=monthlyExpAll[k]||0, sav=inc-exp, rate=inc>0?(sav/inc)*100:0;
-    const topCat=Object.entries(catByKey[k]||{}).sort((a,b)=>b[1]-a[1])[0]||null;
+    const topCat=Object.entries(catByMoKey[k]||{}).sort((a,b)=>b[1]-a[1])[0]||null;
     return {yr,mo,inc,exp,sav,rate,topCat,label:`${MONTHS_LBL[mo-1]} ${yr}`};
   }).filter(r=>r.inc>0||r.exp>0);
 
@@ -760,7 +807,6 @@ function renderMonthly() {
   const totI=rows.reduce((s,r)=>s+r.inc,0), totE=rows.reduce((s,r)=>s+r.exp,0);
   const totS=totI-totE, totR=totI>0?(totS/totI)*100:0;
   const bestRow=rows.reduce((a,b)=>b.sav>a.sav?b:a, rows[0]);
-  const rangeLabel=rows.length===1?rows[0].label:`${rows[0].label} – ${rows[rows.length-1].label}`;
   document.getElementById('monthly-range-label').textContent=`(${rows.length} months)`;
   document.getElementById('monthly-bar-title').textContent=`Monthly Income vs Expenses — ${rangeLabel}`;
   document.getElementById('monthly-table-title').textContent=`Month-by-Month Detail — ${rangeLabel}`;
@@ -794,19 +840,53 @@ function renderMonthly() {
 
 // ── VIEW: Income Sources ──────────────────────────────────────────────────────
 function renderIncome() {
-  const allSrc=Object.keys(srcByYear).sort(), totI=YEARS.reduce((s,y)=>(annualInc[y]||0)+s,0);
-  const peak=Math.max(...YEARS.map(y=>annualInc[y]||0)), peakY=YEARS.find(y=>(annualInc[y]||0)===peak);
+  const {fromYr, fromMo, toYr, toMo, periods, rangeLabel}=getRange('income');
+  // Aggregate income by source and by (yr or mo) within range
+  const srcTotals={}, incByKey={}, srcByPeriod={};
+  for (const r of incRows) {
+    if (!periods.some(p=>p.yr===r.year&&p.mo===r.month)) continue;
+    srcTotals[r.source]=(srcTotals[r.source]||0)+r.amount;
+    const k=`${r.year}-${r.month}`; incByKey[k]=(incByKey[k]||0)+r.amount;
+    if (!srcByPeriod[r.source]) srcByPeriod[r.source]={};
+    srcByPeriod[r.source][k]=(srcByPeriod[r.source][k]||0)+r.amount;
+  }
+  const totI=Object.values(srcTotals).reduce((s,v)=>s+v,0);
+  const topSrc=Object.entries(srcTotals).sort((a,b)=>b[1]-a[1])[0];
+  const avgMo=periods.length>0?totI/periods.length:0;
+  document.getElementById('income-bar-title').textContent=`Income by Source — ${rangeLabel}`;
+  document.getElementById('income-pie-title').textContent=`Income Mix — ${rangeLabel}`;
+  document.getElementById('income-table-title').textContent=`Income Source Breakdown — ${rangeLabel}`;
   document.getElementById('kpi-income').innerHTML=`
-    <div class="kpi blue"><div class="label">Total Income 2020–2026</div><div class="value">${fmtK(totI)}</div><div class="sub">7-year cumulative</div></div>
-    <div class="kpi green"><div class="label">Peak Year</div><div class="value">${peakY}</div><div class="sub">${fmt(peak)}</div></div>
-    <div class="kpi yellow"><div class="label">2026 YTD Income</div><div class="value">${fmtK(annualInc[2026]||0)}</div><div class="sub">Jan–Jun 2026</div></div>`;
-  const colors=allSrc.map((_,i)=>PALETTE[i%PALETTE.length]), labels=YEARS.map(y=>y===2026?'2026 YTD':String(y));
-  mkChart('incomeBar',{type:'bar',data:{labels,datasets:allSrc.map((src,i)=>({label:src,data:YEARS.map(y=>srcByYear[src][y]||0),backgroundColor:colors[i]+'88',borderColor:colors[i],borderWidth:1}))},options:{...dk,responsive:true,interaction:{mode:'index'},plugins:{...dk.plugins,tooltip:{...dk.plugins.tooltip,callbacks:{label:ctx=>ctx.parsed.y>0?` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`:null}}},scales:{...dk.scales,x:{...dk.scales.x,stacked:true},y:{...dk.scales.y,stacked:true}}}});
-  const ytd=allSrc.map(src=>({src,amt:srcByYear[src][2026]||0})).filter(d=>d.amt>0);
-  mkChart('incomePie',{type:'doughnut',data:{labels:ytd.map(d=>d.src),datasets:[{data:ytd.map(d=>d.amt),backgroundColor:ytd.map((_,i)=>PALETTE[i%PALETTE.length]+'cc'),borderColor:'#0f1117',borderWidth:2}]},options:{responsive:true,plugins:{legend:{labels:{color:'#a0aec0',boxWidth:10,font:{size:10}}},tooltip:{backgroundColor:'#1a1d2e',borderColor:'#2d3748',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#a0aec0',callbacks:{label:ctx=>`  ${ctx.label}: ${fmt(ctx.parsed)}`}}}}});
-  const sortedSrc=allSrc.sort((a,b)=>YEARS.reduce((s,y)=>(srcByYear[b][y]||0)+s,0)-YEARS.reduce((s,y)=>(srcByYear[a][y]||0)+s,0));
-  document.getElementById('income-table-head').innerHTML=`<tr><th>Source</th>${YEARS.map(y=>`<th class="num">${y===2026?'2026 YTD':y}</th>`).join('')}<th class="num">Total</th></tr>`;
-  document.getElementById('income-table-body').innerHTML=[...sortedSrc.map(src=>{const t=YEARS.reduce((s,y)=>(srcByYear[src][y]||0)+s,0);return`<tr><td><strong>${src}</strong></td>${YEARS.map(y=>{const v=srcByYear[src][y]||0;return`<td class="num">${v>0?fmt(v):'—'}</td>`;}).join('')}<td class="num"><strong>${fmt(t)}</strong></td></tr>`;}),`<tr style="border-top:2px solid #4a5568;"><td><strong>Total</strong></td>${YEARS.map(y=>`<td class="num"><strong>${fmt(annualInc[y]||0)}</strong></td>`).join('')}<td class="num"><strong>${fmt(totI)}</strong></td></tr>`].join('');
+    <div class="kpi blue"><div class="label">Total Income</div><div class="value">${fmtK(totI)}</div><div class="sub">${rangeLabel}</div></div>
+    <div class="kpi green"><div class="label">Top Source</div><div class="value" style="font-size:18px;">${topSrc?topSrc[0]:'—'}</div><div class="sub">${topSrc?fmt(topSrc[1]):''}</div></div>
+    <div class="kpi yellow"><div class="label">Avg / Month</div><div class="value">${fmtK(avgMo)}</div><div class="sub">${periods.length} months</div></div>`;
+  // Decide grouping: by year if span > 1 year, else by month
+  const multiYear=toYr>fromYr||(toYr===fromYr&&periods.length>12);
+  const allSrc=Object.keys(srcTotals).sort((a,b)=>srcTotals[b]-srcTotals[a]);
+  const colors=allSrc.map((_,i)=>PALETTE[i%PALETTE.length]);
+  if (multiYear) {
+    // Group by year
+    const yrs=[...new Set(periods.map(p=>p.yr))];
+    const barLabels=yrs.map(y=>String(y));
+    const srcByYrRange={};
+    for (const r of incRows) {
+      if (!periods.some(p=>p.yr===r.year&&p.mo===r.month)) continue;
+      if (!srcByYrRange[r.source]) srcByYrRange[r.source]={};
+      srcByYrRange[r.source][r.year]=(srcByYrRange[r.source][r.year]||0)+r.amount;
+    }
+    mkChart('incomeBar',{type:'bar',data:{labels:barLabels,datasets:allSrc.map((src,i)=>({label:src,data:yrs.map(y=>srcByYrRange[src]?.[y]||0),backgroundColor:colors[i]+'88',borderColor:colors[i],borderWidth:1}))},options:{...dk,responsive:true,interaction:{mode:'index'},plugins:{...dk.plugins,tooltip:{...dk.plugins.tooltip,callbacks:{label:ctx=>ctx.parsed.y>0?` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`:null}}},scales:{...dk.scales,x:{...dk.scales.x,stacked:true},y:{...dk.scales.y,stacked:true}}}});
+    document.getElementById('income-table-head').innerHTML=`<tr><th>Source</th>${yrs.map(y=>`<th class="num">${y}</th>`).join('')}<th class="num">Total</th></tr>`;
+    document.getElementById('income-table-body').innerHTML=[...allSrc.map(src=>{const t=srcTotals[src]||0;return`<tr><td><strong>${src}</strong></td>${yrs.map(y=>{const v=srcByYrRange[src]?.[y]||0;return`<td class="num">${v>0?fmt(v):'—'}</td>`;}).join('')}<td class="num"><strong>${fmt(t)}</strong></td></tr>`;}),`<tr style="border-top:2px solid #4a5568;"><td><strong>Total</strong></td>${yrs.map(y=>{const s=incRows.filter(r=>r.year===y&&periods.some(p=>p.yr===r.year&&p.mo===r.month)).reduce((a,r)=>a+r.amount,0);return`<td class="num"><strong>${fmt(s)}</strong></td>`;}).join('')}<td class="num"><strong>${fmt(totI)}</strong></td></tr>`].join('');
+  } else {
+    // Group by month
+    const barLabels=periods.map(p=>`${MONTHS_LBL[p.mo-1].slice(0,3)} ${p.yr}`);
+    mkChart('incomeBar',{type:'bar',data:{labels:barLabels,datasets:allSrc.map((src,i)=>({label:src,data:periods.map(p=>srcByPeriod[src]?.[`${p.yr}-${p.mo}`]||0),backgroundColor:colors[i]+'88',borderColor:colors[i],borderWidth:1}))},options:{...dk,responsive:true,interaction:{mode:'index'},plugins:{...dk.plugins,tooltip:{...dk.plugins.tooltip,callbacks:{label:ctx=>ctx.parsed.y>0?` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`:null}}},scales:{...dk.scales,x:{...dk.scales.x,stacked:true},y:{...dk.scales.y,stacked:true}}}});
+    document.getElementById('income-table-head').innerHTML=`<tr><th>Source</th>${periods.map(p=>`<th class="num">${MONTHS_LBL[p.mo-1]} ${p.yr}</th>`).join('')}<th class="num">Total</th></tr>`;
+    document.getElementById('income-table-body').innerHTML=[...allSrc.map(src=>{const t=srcTotals[src]||0;return`<tr><td><strong>${src}</strong></td>${periods.map(p=>{const v=srcByPeriod[src]?.[`${p.yr}-${p.mo}`]||0;return`<td class="num">${v>0?fmt(v):'—'}</td>`;}).join('')}<td class="num"><strong>${fmt(t)}</strong></td></tr>`;}),`<tr style="border-top:2px solid #4a5568;"><td><strong>Total</strong></td>${periods.map(p=>{const v=incByKey[`${p.yr}-${p.mo}`]||0;return`<td class="num"><strong>${fmt(v)}</strong></td>`;}).join('')}<td class="num"><strong>${fmt(totI)}</strong></td></tr>`].join('');
+  }
+  // Donut: income mix for selected range
+  const mixData=allSrc.map((src,i)=>({src,amt:srcTotals[src]||0,color:colors[i]})).filter(d=>d.amt>0);
+  mkChart('incomePie',{type:'doughnut',data:{labels:mixData.map(d=>d.src),datasets:[{data:mixData.map(d=>d.amt),backgroundColor:mixData.map(d=>d.color+'cc'),borderColor:'#0f1117',borderWidth:2}]},options:{responsive:true,plugins:{legend:{labels:{color:'#a0aec0',boxWidth:10,font:{size:10}}},tooltip:{backgroundColor:'#1a1d2e',borderColor:'#2d3748',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#a0aec0',callbacks:{label:ctx=>`  ${ctx.label}: ${fmt(ctx.parsed)}`}}}}});
 }
 
 // ── VIEW: Nanna Account ───────────────────────────────────────────────────────
